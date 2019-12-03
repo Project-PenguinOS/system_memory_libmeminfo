@@ -18,9 +18,12 @@
 
 #include <sys/types.h>
 
+#include <array>
+#include <functional>
+#include <initializer_list>
 #include <map>
 #include <string>
-#include <vector>
+#include <string_view>
 
 namespace android {
 namespace meminfo {
@@ -28,35 +31,71 @@ namespace meminfo {
 class SysMemInfo final {
     // System or Global memory accounting
   public:
-    static const std::vector<std::string> kDefaultSysMemInfoTags;
+    static constexpr const char kMemTotal[] = "MemTotal:";
+    static constexpr const char kMemFree[] = "MemFree:";
+    static constexpr const char kMemBuffers[] = "Buffers:";
+    static constexpr const char kMemCached[] = "Cached:";
+    static constexpr const char kMemShmem[] = "Shmem:";
+    static constexpr const char kMemSlab[] = "Slab:";
+    static constexpr const char kMemSReclaim[] = "SReclaimable:";
+    static constexpr const char kMemSUnreclaim[] = "SUnreclaim:";
+    static constexpr const char kMemSwapTotal[] = "SwapTotal:";
+    static constexpr const char kMemSwapFree[] = "SwapFree:";
+    static constexpr const char kMemMapped[] = "Mapped:";
+    static constexpr const char kMemVmallocUsed[] = "VmallocUsed:";
+    static constexpr const char kMemPageTables[] = "PageTables:";
+    static constexpr const char kMemKernelStack[] = "KernelStack:";
+
+    static constexpr std::initializer_list<std::string_view> kDefaultSysMemInfoTags = {
+            SysMemInfo::kMemTotal,      SysMemInfo::kMemFree,        SysMemInfo::kMemBuffers,
+            SysMemInfo::kMemCached,     SysMemInfo::kMemShmem,       SysMemInfo::kMemSlab,
+            SysMemInfo::kMemSReclaim,   SysMemInfo::kMemSUnreclaim,  SysMemInfo::kMemSwapTotal,
+            SysMemInfo::kMemSwapFree,   SysMemInfo::kMemMapped,      SysMemInfo::kMemVmallocUsed,
+            SysMemInfo::kMemPageTables, SysMemInfo::kMemKernelStack,
+    };
 
     SysMemInfo() = default;
 
     // Parse /proc/meminfo and read values that are needed
-    bool ReadMemInfo(const std::string& path = "/proc/meminfo");
-    bool ReadMemInfo(const std::vector<std::string>& tags,
-                     const std::string& path = "/proc/meminfo");
+    bool ReadMemInfo(const char* path = "/proc/meminfo");
+    bool ReadMemInfo(size_t ntags, const std::string_view* tags, uint64_t* out,
+                     const char* path = "/proc/meminfo");
+    bool ReadMemInfo(std::vector<uint64_t>* out, const char* path = "/proc/meminfo");
+
+    // Parse /proc/vmallocinfo and return total physical memory mapped
+    // in vmalloc area by the kernel.
+    // Note that this deliberately ignores binder buffers. They are _always_
+    // mapped in a process and are counted for in each process.
+    uint64_t ReadVmallocInfo();
 
     // getters
-    uint64_t mem_total_kb() { return mem_in_kb_["MemTotal:"]; }
-    uint64_t mem_free_kb() { return mem_in_kb_["MemFree:"]; }
-    uint64_t mem_buffers_kb() { return mem_in_kb_["Buffers:"]; }
-    uint64_t mem_cached_kb() { return mem_in_kb_["Cached:"]; }
-    uint64_t mem_shmem_kb() { return mem_in_kb_["Shmem:"]; }
-    uint64_t mem_slab_kb() { return mem_in_kb_["Slab:"]; }
-    uint64_t mem_slab_reclailmable_kb() { return mem_in_kb_["SReclaimable:"]; }
-    uint64_t mem_slab_unreclaimable_kb() { return mem_in_kb_["SUnreclaim:"]; }
-    uint64_t mem_swap_kb() { return mem_in_kb_["SwapTotal:"]; }
-    uint64_t mem_free_swap_kb() { return mem_in_kb_["SwapFree:"]; }
-    uint64_t mem_zram_kb() { return mem_in_kb_["Zram:"]; }
-    uint64_t mem_mapped_kb() { return mem_in_kb_["Mapped:"]; }
-    uint64_t mem_vmalloc_used_kb() { return mem_in_kb_["VmallocUsed:"]; }
-    uint64_t mem_page_tables_kb() { return mem_in_kb_["PageTables:"]; }
-    uint64_t mem_kernel_stack_kb() { return mem_in_kb_["KernelStack:"]; }
+    uint64_t mem_total_kb() { return mem_in_kb_[kMemTotal]; }
+    uint64_t mem_free_kb() { return mem_in_kb_[kMemFree]; }
+    uint64_t mem_buffers_kb() { return mem_in_kb_[kMemBuffers]; }
+    uint64_t mem_cached_kb() { return mem_in_kb_[kMemCached]; }
+    uint64_t mem_shmem_kb() { return mem_in_kb_[kMemShmem]; }
+    uint64_t mem_slab_kb() { return mem_in_kb_[kMemSlab]; }
+    uint64_t mem_slab_reclaimable_kb() { return mem_in_kb_[kMemSReclaim]; }
+    uint64_t mem_slab_unreclaimable_kb() { return mem_in_kb_[kMemSUnreclaim]; }
+    uint64_t mem_swap_kb() { return mem_in_kb_[kMemSwapTotal]; }
+    uint64_t mem_swap_free_kb() { return mem_in_kb_[kMemSwapFree]; }
+    uint64_t mem_mapped_kb() { return mem_in_kb_[kMemMapped]; }
+    uint64_t mem_vmalloc_used_kb() { return mem_in_kb_[kMemVmallocUsed]; }
+    uint64_t mem_page_tables_kb() { return mem_in_kb_[kMemPageTables]; }
+    uint64_t mem_kernel_stack_kb() { return mem_in_kb_[kMemKernelStack]; }
+    uint64_t mem_zram_kb(const char* zram_dev = nullptr);
 
   private:
-    std::map<std::string, uint64_t> mem_in_kb_;
+    std::map<std::string_view, uint64_t> mem_in_kb_;
+    bool MemZramDevice(const char* zram_dev, uint64_t* mem_zram_dev);
+    bool ReadMemInfo(const char* path, size_t ntags, const std::string_view* tags,
+                     std::function<void(std::string_view, uint64_t)> store_val);
 };
+
+// Parse /proc/vmallocinfo and return total physical memory mapped
+// in vmalloc area by the kernel. Note that this deliberately ignores binder buffers. They are
+// _always_ mapped in a process and are counted for in each process.
+uint64_t ReadVmallocInfo(const char* path = "/proc/vmallocinfo");
 
 }  // namespace meminfo
 }  // namespace android

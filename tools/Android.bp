@@ -13,15 +13,78 @@
 // limitations under the License.
 
 cc_binary {
-    name: "procmem2",
+    name: "librank",
     cflags: [
         "-Wall",
         "-Werror",
-        "-Wno-unused-parameter",
+    ],
+
+    srcs: ["librank.cpp"],
+    shared_libs: [
+        "libbase",
+        "libmeminfo",
+    ],
+}
+
+cc_binary {
+    name: "procmem",
+    cflags: [
+        "-Wall",
+        "-Werror",
     ],
 
     srcs: ["procmem.cpp"],
     shared_libs: [
+        "libbase",
+        "libmeminfo",
+    ],
+}
+
+cc_binary {
+    name: "procrank",
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    srcs: ["procrank.cpp"],
+    shared_libs: [
+        "libbase",
+        "libmeminfo",
+    ],
+}
+
+cc_binary {
+    name: "showmap",
+    host_supported: true,
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    srcs: ["showmap.cpp"],
+    shared_libs: [
+        "libbase",
+        "libmeminfo",
+    ],
+
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
+}
+
+cc_binary {
+    name: "wsstop",
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    srcs: ["wsstop.cpp"],
+    shared_libs: [
+        "libbase",
+        "liblog",
         "libmeminfo",
     ],
 }
