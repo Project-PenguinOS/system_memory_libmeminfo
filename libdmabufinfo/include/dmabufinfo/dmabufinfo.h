@@ -62,7 +62,7 @@ struct DmaBuffer {
     void SetName(const std::string& name) { name_ = name; }
     void SetExporter(const std::string& exporter) { exporter_ = exporter; }
     void SetCount(uint64_t count) { count_ = count; }
-    uint64_t Pss() const { return size_ / pids_.size(); }
+    uint64_t Pss(pid_t pid) const { return maprefs_.count(pid) > 0 ? size_ / maprefs_.size() : 0; }
 
     bool operator==(const DmaBuffer& rhs) {
         return (inode_ == rhs.inode()) && (size_ == rhs.size()) && (name_ == rhs.name()) &&
@@ -100,14 +100,14 @@ bool ReadDmaBufInfo(std::vector<DmaBuffer>* dmabufs,
 // Read and return dmabuf objects for a given process without the help
 // of DEBUGFS
 // Returns false if something went wrong with the function, true otherwise.
-bool ReadDmaBufInfo(pid_t pid, std::vector<DmaBuffer>* dmabufs);
+bool ReadDmaBufInfo(pid_t pid, std::vector<DmaBuffer>* dmabufs, bool read_fdrefs = true);
 
 // Append new dmabuf objects from a given process to an existing vector.
 // When the vector contains an existing element with a matching inode,
 // the reference counts will be updated.
 // Does not depend on DEBUGFS.
 // Returns false if something went wrong with the function, true otherwise.
-bool AppendDmaBufInfo(pid_t pid, std::vector<DmaBuffer>* dmabufs);
+bool AppendDmaBufInfo(pid_t pid, std::vector<DmaBuffer>* dmabufs, bool read_fdrefs = true);
 
 }  // namespace dmabufinfo
 }  // namespace android

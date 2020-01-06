@@ -555,6 +555,7 @@ Writeback:             0 kB
 AnonPages:         74988 kB
 Mapped:            62624 kB
 Shmem:              4020 kB
+KReclaimable:      87324 kB
 Slab:              86464 kB
 SReclaimable:      44432 kB
 SUnreclaim:        42032 kB
@@ -599,6 +600,7 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mi.mem_vmalloc_used_kb(), 65536);
     EXPECT_EQ(mi.mem_page_tables_kb(), 2900);
     EXPECT_EQ(mi.mem_kernel_stack_kb(), 4880);
+    EXPECT_EQ(mi.mem_kreclaimable_kb(), 87324);
 }
 
 TEST(SysMemInfo, TestEmptyFile) {
@@ -639,6 +641,7 @@ enum {
     MEMINFO_VMALLOC_USED,
     MEMINFO_PAGE_TABLES,
     MEMINFO_KERNEL_STACK,
+    MEMINFO_KRECLAIMABLE,
     MEMINFO_COUNT
 };
 
@@ -664,6 +667,7 @@ Writeback:             0 kB
 AnonPages:         74988 kB
 Mapped:            62624 kB
 Shmem:              4020 kB
+KReclaimable:      87324 kB
 Slab:              86464 kB
 SReclaimable:      44432 kB
 SUnreclaim:        42032 kB
@@ -716,6 +720,7 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mem[MEMINFO_VMALLOC_USED], 65536);
     EXPECT_EQ(mem[MEMINFO_PAGE_TABLES], 2900);
     EXPECT_EQ(mem[MEMINFO_KERNEL_STACK], 4880);
+    EXPECT_EQ(mem[MEMINFO_KRECLAIMABLE], 87324);
 }
 
 TEST(SysMemInfo, TestVmallocInfoNoMemory) {
@@ -772,6 +777,32 @@ TEST(SysMemInfo, TestVmallocInfoAll) {
     std::string file = std::string(tf.path);
 
     EXPECT_EQ(ReadVmallocInfo(file.c_str()), 7 * getpagesize());
+}
+
+TEST(SysMemInfo, TestReadIonHeapsSizeKb) {
+    std::string total_heaps_kb = R"total_heaps_kb(98480)total_heaps_kb";
+    uint64_t size;
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(total_heaps_kb, tf.fd));
+    std::string file = std::string(tf.path);
+
+    ASSERT_TRUE(ReadIonHeapsSizeKb(&size, file));
+    EXPECT_EQ(size, 98480);
+}
+
+TEST(SysMemInfo, TestReadIonPoolsSizeKb) {
+    std::string total_pools_kb = R"total_pools_kb(416)total_pools_kb";
+    uint64_t size;
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(total_pools_kb, tf.fd));
+    std::string file = std::string(tf.path);
+
+    ASSERT_TRUE(ReadIonPoolsSizeKb(&size, file));
+    EXPECT_EQ(size, 416);
 }
 
 int main(int argc, char** argv) {
