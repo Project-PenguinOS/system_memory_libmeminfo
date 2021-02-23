@@ -28,6 +28,8 @@
 namespace android {
 namespace meminfo {
 
+static constexpr const char kDmabufHeapRoot[] = "/dev/dma_heap";
+
 class SysMemInfo final {
     // System or Global memory accounting
   public:
@@ -115,8 +117,17 @@ bool ReadIonHeapsSizeKb(
 bool ReadIonPoolsSizeKb(
     uint64_t* size, const std::string& path = "/sys/kernel/ion/total_pools_kb");
 
+// Read DMA-BUF heap pools allocation size in kb
+bool ReadDmabufHeapPoolsSizeKb(uint64_t* size,
+                            const std::string& path = "/sys/kernel/dma_heap/total_pools_kb");
+
 // Read GPU total usage size in kb
 bool ReadGpuTotalUsageKb(uint64_t* size);
+
+// Read total size of DMA-BUFs exported from the DMA-BUF heap framework in kb
+bool ReadDmabufHeapTotalExportedKb(
+        uint64_t* size, const std::string& dma_heap_root = kDmabufHeapRoot,
+        const std::string& dma_buf_sysfs_path = "/sys/kernel/dmabuf/buffers");
 
 }  // namespace meminfo
 }  // namespace android
