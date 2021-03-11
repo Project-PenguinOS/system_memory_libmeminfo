@@ -200,20 +200,40 @@ const MemUsage& ProcMemInfo::Wss() {
     return usage_;
 }
 
-bool ProcMemInfo::ForEachVma(const VmaCallback& callback) {
-    std::string path = ::android::base::StringPrintf("/proc/%d/smaps", pid_);
-    return ForEachVmaFromFile(path, callback);
+bool ProcMemInfo::ForEachVma(const VmaCallback& callback, bool use_smaps) {
+    std::string path =
+            ::android::base::StringPrintf("/proc/%d/%s", pid_, use_smaps ? "smaps" : "maps");
+    return ForEachVmaFromFile(path, callback, use_smaps);
+}
+
+bool ProcMemInfo::ForEachVmaFromMaps(const VmaCallback& callback) {
+    Vma vma;
+    auto vmaCollect = [&callback,&vma](const uint64_t start, uint64_t end, uint16_t flags,
+                            uint64_t pgoff, ino_t inode, const char* name, bool shared) {
+        vma.start = start;
+        vma.end = end;
+        vma.flags = flags;
+        vma.offset = pgoff;
+        vma.name = name;
+        vma.inode = inode;
+        vma.is_shared = shared;
+        callback(vma);
+    };
+
+    bool success = ::android::procinfo::ReadProcessMaps(pid_, vmaCollect);
+
+    return success;
 }
 
 bool ProcMemInfo::SmapsOrRollup(MemUsage* stats) const {
     std::string path = ::android::base::StringPrintf(
-            "/proc/%d/%s", pid_, IsSmapsRollupSupported(pid_) ? "smaps_rollup" : "smaps");
+            "/proc/%d/%s", pid_, IsSmapsRollupSupported() ? "smaps_rollup" : "smaps");
     return SmapsOrRollupFromFile(path, stats);
 }
 
 bool ProcMemInfo::SmapsOrRollupPss(uint64_t* pss) const {
     std::string path = ::android::base::StringPrintf(
-            "/proc/%d/%s", pid_, IsSmapsRollupSupported(pid_) ? "smaps_rollup" : "smaps");
+            "/proc/%d/%s", pid_, IsSmapsRollupSupported() ? "smaps_rollup" : "smaps");
     return SmapsOrRollupPssFromFile(path, pss);
 }
 
@@ -443,7 +463,8 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_
 }
 
 // Public APIs
-bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback) {
+bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback,
+                        bool read_smaps_fields) {
     auto fp = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
     if (fp == nullptr) {
         return false;
@@ -485,7 +506,12 @@ bool ForEachVmaFromFile(const std::string& path, const VmaCallback& callback) {
             LOG(ERROR) << "Failed to parse " << path;
             return false;
         }
-        parsing_vma = true;
+        if (read_smaps_fields) {
+            parsing_vma = true;
+        } else {
+            // Done collecting stats, make the call back
+            callback(vma);
+        }
     }
 
     // free getline() managed buffer
@@ -502,7 +528,7 @@ enum smaps_rollup_support { UNTRIED, SUPPORTED, UNSUPPORTED };
 
 static std::atomic<smaps_rollup_support> g_rollup_support = UNTRIED;
 
-bool IsSmapsRollupSupported(pid_t pid) {
+bool IsSmapsRollupSupported() {
     // Similar to OpenSmapsOrRollup checks from android_os_Debug.cpp, except
     // the method only checks if rollup is supported and returns the status
     // right away.
@@ -510,10 +536,9 @@ bool IsSmapsRollupSupported(pid_t pid) {
     if (rollup_support != UNTRIED) {
         return rollup_support == SUPPORTED;
     }
-    std::string rollup_file = ::android::base::StringPrintf("/proc/%d/smaps_rollup", pid);
-    if (access(rollup_file.c_str(), F_OK | R_OK)) {
-        // No check for errno = ENOENT necessary here. The caller MUST fallback to
-        // using /proc/<pid>/smaps instead anyway.
+
+    // Check the calling process for smaps_rollup since it is guaranteed to be alive
+    if (access("/proc/self/smaps_rollup", F_OK | R_OK)) {
         g_rollup_support.store(UNSUPPORTED, std::memory_order_relaxed);
         return false;
     }
