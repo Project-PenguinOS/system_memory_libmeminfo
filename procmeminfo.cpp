@@ -84,6 +84,8 @@ static bool parse_smaps_field(const char* line, MemUsage* stats) {
                     uint64_t prdi = strtoull(c, nullptr, 10);
                     stats->private_dirty = prdi;
                     stats->uss += prdi;
+                } else if (strncmp(field, "Private_Hugetlb:", 16) == 0) {
+                    stats->private_hugetlb = strtoull(c, nullptr, 10);
                 }
                 break;
             case 'S':
@@ -97,11 +99,25 @@ static bool parse_smaps_field(const char* line, MemUsage* stats) {
                     stats->swap = strtoull(c, nullptr, 10);
                 } else if (strncmp(field, "SwapPss:", 8) == 0) {
                     stats->swap_pss = strtoull(c, nullptr, 10);
+                } else if (strncmp(field, "ShmemPmdMapped:", 15) == 0) {
+                    stats->shmem_pmd_mapped = strtoull(c, nullptr, 10);
+                } else if (strncmp(field, "Shared_Hugetlb:", 15) == 0) {
+                    stats->shared_hugetlb = strtoull(c, nullptr, 10);
                 }
                 break;
             case 'R':
                 if (strncmp(field, "Rss:", 4) == 0) {
                     stats->rss = strtoull(c, nullptr, 10);
+                }
+                break;
+            case 'A':
+                if (strncmp(field, "AnonHugePages:", 14) == 0) {
+                    stats->anon_huge_pages = strtoull(c, nullptr, 10);
+                }
+                break;
+            case 'F':
+                if (strncmp(field, "FilePmdMapped:", 14) == 0) {
+                    stats->file_pmd_mapped = strtoull(c, nullptr, 10);
                 }
                 break;
         }
@@ -416,6 +432,10 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_
             LOG(ERROR) << "Failed to get page flags for " << page_frame << " in process " << pid_;
             swap_offsets_.clear();
             return false;
+        }
+
+        if (KPAGEFLAG_THP(cur_page_flags)) {
+            vma.usage.thp += pagesz;
         }
 
         // skip unwanted pages from the count
