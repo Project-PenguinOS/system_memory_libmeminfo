@@ -209,9 +209,6 @@ bool ReadDmaBufMapRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs,
         return false;
     }
 
-    char* line = nullptr;
-    size_t len = 0;
-
     // Process the map if it is dmabuf. Add map reference to existing object in 'dmabufs'
     // if it was already found. If it wasn't create a new one and append it to 'dmabufs'
     auto account_dmabuf = [&](const android::procinfo::MapInfo& mapinfo) {
@@ -231,17 +228,31 @@ bool ReadDmaBufMapRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs,
         // We have a new buffer, but unknown count and name and exporter name
         // Try to lookup exporter name in sysfs
         std::string exporter;
-        if (!ReadBufferExporter(mapinfo.inode, &exporter, dmabuf_sysfs_path)) {
+        bool sysfs_stats = ReadBufferExporter(mapinfo.inode, &exporter, dmabuf_sysfs_path);
+        if (!sysfs_stats) {
             exporter = "<unknown>";
         }
-        DmaBuffer& dbuf = dmabufs->emplace_back(mapinfo.inode, mapinfo.end - mapinfo.start, 0,
-                                                exporter, "<unknown>");
+
+        // Using the VMA range as the size of the buffer can be misleading,
+        // due to partially mapped buffers or VMAs that extend beyond the
+        // buffer size.
+        //
+        // Attempt to retrieve the real buffer size from sysfs.
+        uint64_t size = 0;
+        if (!sysfs_stats || !ReadBufferSize(mapinfo.inode, &size, dmabuf_sysfs_path)) {
+            size = mapinfo.end - mapinfo.start;
+        }
+
+        DmaBuffer& dbuf = dmabufs->emplace_back(mapinfo.inode, size, 0, exporter, "<unknown>");
         dbuf.AddMapRef(pid);
     };
 
+    char* line = nullptr;
+    size_t len = 0;
     while (getline(&line, &len, fp.get()) > 0) {
         if (!::android::procinfo::ReadMapFileContent(line, account_dmabuf)) {
             LOG(ERROR) << "Failed to parse maps for pid: " << pid;
+            free(line);
             return false;
         }
     }

@@ -56,11 +56,12 @@ class ProcMemInfo final {
     // called, this function will fill in usage stats for all vmas in 'maps_'.
     bool GetUsageStats(bool get_wss, bool use_pageidle = false, bool swap_only = false);
 
-    // Collect all 'vma' or 'maps' from /proc/<pid>/smaps and store them in 'maps_'. Returns a
-    // constant reference to the vma vector after the collection is done.
+    // Collect all 'vma' or 'maps' from /proc/<pid>/smaps and store them in 'maps_'. If
+    // 'collect_usage' is 'true', this method will populate 'usage_' as vmas are being
+    // collected. Returns a constant reference to the vma vector after the collection is done.
     //
     // Each 'struct Vma' is *fully* populated by this method (unlike SmapsOrRollup).
-    const std::vector<Vma>& Smaps(const std::string& path = "");
+    const std::vector<Vma>& Smaps(const std::string& path = "", bool collect_usage = false);
 
     // If 'use_smaps' is 'true' this method reads /proc/<pid>/smaps and calls the callback()
     // for each vma or map that it finds, else if 'use_smaps' is false /proc/<pid>/maps is
@@ -72,6 +73,12 @@ class ProcMemInfo final {
     // Reads all VMAs from /proc/<pid>/maps and calls the callback() for each one of them.
     // Returns false in case of failure during parsing.
     bool ForEachVmaFromMaps(const VmaCallback& callback);
+
+    // Takes the existing VMAs in 'maps_' and calls the callback() for each one
+    // of them. This is intended to avoid parsing /proc/<pid>/maps or
+    // /proc/<pid>/smaps twice.
+    // Returns false if 'maps_' is empty.
+    bool ForEachExistingVma(const VmaCallback& callback);
 
     // Used to parse either of /proc/<pid>/{smaps, smaps_rollup} and record the process's
     // Pss and Private memory usage in 'stats'.  In particular, the method only populates the fields

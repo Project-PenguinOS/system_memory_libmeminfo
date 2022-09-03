@@ -167,7 +167,7 @@ const std::vector<Vma>& ProcMemInfo::MapsWithoutUsageStats() {
     return maps_;
 }
 
-const std::vector<Vma>& ProcMemInfo::Smaps(const std::string& path) {
+const std::vector<Vma>& ProcMemInfo::Smaps(const std::string& path, bool collect_usage) {
     if (!maps_.empty()) {
         return maps_;
     }
@@ -176,6 +176,9 @@ const std::vector<Vma>& ProcMemInfo::Smaps(const std::string& path) {
         if (std::find(g_excluded_vmas.begin(), g_excluded_vmas.end(), vma.name) ==
                 g_excluded_vmas.end()) {
             maps_.emplace_back(vma);
+            if (collect_usage) {
+                add_mem_usage(&usage_, vma.usage);
+            }
         }
     };
     if (path.empty() && !ForEachVma(collect_vmas)) {
@@ -223,6 +226,16 @@ bool ProcMemInfo::ForEachVma(const VmaCallback& callback, bool use_smaps) {
     std::string path =
             ::android::base::StringPrintf("/proc/%d/%s", pid_, use_smaps ? "smaps" : "maps");
     return ForEachVmaFromFile(path, callback, use_smaps);
+}
+
+bool ProcMemInfo::ForEachExistingVma(const VmaCallback& callback) {
+    if (maps_.empty()) {
+        return false;
+    }
+    for (auto& vma : maps_) {
+        callback(vma);
+    }
+    return true;
 }
 
 bool ProcMemInfo::ForEachVmaFromMaps(const VmaCallback& callback) {
@@ -337,7 +350,11 @@ bool ProcMemInfo::ReadMaps(bool get_wss, bool use_pageidle, bool get_usage_stats
         return true;
     }
 
-    return GetUsageStats(get_wss, use_pageidle, swap_only);
+    if (!GetUsageStats(get_wss, use_pageidle, swap_only)) {
+        maps_.clear();
+        return false;
+    }
+    return true;
 }
 
 bool ProcMemInfo::GetUsageStats(bool get_wss, bool use_pageidle, bool swap_only) {
@@ -350,7 +367,6 @@ bool ProcMemInfo::GetUsageStats(bool get_wss, bool use_pageidle, bool swap_only)
         if (!ReadVmaStats(pagemap_fd.get(), vma, get_wss, use_pageidle, swap_only)) {
             LOG(ERROR) << "Failed to read page map for vma " << vma.name << "[" << vma.start << "-"
                        << vma.end << "]";
-            maps_.clear();
             return false;
         }
         add_mem_usage(&usage_, vma.usage);
