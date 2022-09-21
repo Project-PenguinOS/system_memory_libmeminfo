@@ -19,6 +19,7 @@
 #include <sys/types.h>
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "meminfo.h"
@@ -49,8 +50,9 @@ class ProcMemInfo final {
     const std::vector<Vma>& MapsWithoutUsageStats();
 
     // If MapsWithoutUsageStats was called, this function will fill in
-    // usage stats for this single vma.
-    bool FillInVmaStats(Vma& vma);
+    // usage stats for this single vma. If 'use_kb' is true, the vma's
+    // usage will be populated in kilobytes instead of bytes.
+    bool FillInVmaStats(Vma& vma, bool use_kb = false);
 
     // If ReadMaps (with get_usage_stats == false) or MapsWithoutUsageStats was
     // called, this function will fill in usage stats for all vmas in 'maps_'.
@@ -148,6 +150,15 @@ bool SmapsOrRollupFromFile(const std::string& path, MemUsage* stats);
 // from a file and returns total Pss in kB. The file MUST be in the same format
 // as /proc/<pid>/smaps or /proc/<pid>/smaps_rollup
 bool SmapsOrRollupPssFromFile(const std::string& path, uint64_t* pss);
+
+// The output format that can be specified by user.
+enum class Format { INVALID = 0, RAW, JSON, CSV };
+
+Format GetFormat(std::string_view arg);
+
+std::string EscapeCsvString(const std::string& raw);
+
+std::string EscapeJsonString(const std::string& raw);
 
 }  // namespace meminfo
 }  // namespace android

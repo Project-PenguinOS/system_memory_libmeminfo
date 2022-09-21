@@ -27,6 +27,7 @@ cc_binary {
     shared_libs: [
         "libbase",
         "libmeminfo",
+        "libsmapinfo",
     ],
 }
 
@@ -56,6 +57,7 @@ cc_binary {
         "libbase",
         "libmeminfo",
         "libprocinfo",
+        "libsmapinfo",
     ],
 }
 

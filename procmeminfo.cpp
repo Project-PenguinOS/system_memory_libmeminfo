@@ -66,6 +66,27 @@ static void add_mem_usage(MemUsage* to, const MemUsage& from) {
     to->shared_dirty += from.shared_dirty;
 }
 
+// Converts MemUsage stats from KB to B in case usage is expected in bytes.
+static void convert_usage_kb_to_b(MemUsage& usage) {
+    // These stats are only populated if /proc/<pid>/smaps is read, so they are excluded:
+    // swap_pss, anon_huge_pages, shmem_pmdmapped, file_pmd_mapped, shared_hugetlb, private_hugetlb.
+    constexpr int conversion_factor = 1024;
+    usage.vss *= conversion_factor;
+    usage.rss *= conversion_factor;
+    usage.pss *= conversion_factor;
+    usage.uss *= conversion_factor;
+
+    usage.swap *= conversion_factor;
+
+    usage.private_clean *= conversion_factor;
+    usage.private_dirty *= conversion_factor;
+
+    usage.shared_clean *= conversion_factor;
+    usage.shared_dirty *= conversion_factor;
+
+    usage.thp *= conversion_factor;
+}
+
 // Returns true if the line was valid smaps stats line false otherwise.
 static bool parse_smaps_field(const char* line, MemUsage* stats) {
     const char *end = line;
@@ -121,6 +142,11 @@ static bool parse_smaps_field(const char* line, MemUsage* stats) {
             case 'F':
                 if (strncmp(line, "FilePmdMapped:", 14) == 0) {
                     stats->file_pmd_mapped = strtoull(c, nullptr, 10);
+                }
+                break;
+            case 'L':
+                if (strncmp(line, "Locked:", 7) == 0) {
+                    stats->locked = strtoull(c, nullptr, 10);
                 }
                 break;
         }
@@ -375,7 +401,7 @@ bool ProcMemInfo::GetUsageStats(bool get_wss, bool use_pageidle, bool swap_only)
     return true;
 }
 
-bool ProcMemInfo::FillInVmaStats(Vma& vma) {
+bool ProcMemInfo::FillInVmaStats(Vma& vma, bool use_kb) {
     ::android::base::unique_fd pagemap_fd(GetPagemapFd(pid_));
     if (pagemap_fd == -1) {
         return false;
@@ -385,6 +411,9 @@ bool ProcMemInfo::FillInVmaStats(Vma& vma) {
         LOG(ERROR) << "Failed to read page map for vma " << vma.name << "[" << vma.start << "-"
                    << vma.end << "]";
         return false;
+    }
+    if (!use_kb) {
+        convert_usage_kb_to_b(vma.usage);
     }
     return true;
 }
@@ -397,9 +426,9 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_
         return false;
     }
 
-    uint64_t pagesz = getpagesize();
-    size_t num_pages = (vma.end - vma.start) / pagesz;
-    size_t first_page = vma.start / pagesz;
+    uint64_t pagesz_kb = getpagesize() / 1024;
+    size_t num_pages = (vma.end - vma.start) / (pagesz_kb * 1024);
+    size_t first_page = vma.start / (pagesz_kb * 1024);
 
     std::vector<uint64_t> page_cache;
     size_t cur_page_cache_index = 0;
@@ -437,7 +466,7 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_
         if (!PAGE_PRESENT(page_info) && !PAGE_SWAPPED(page_info)) continue;
 
         if (PAGE_SWAPPED(page_info)) {
-            vma.usage.swap += pagesz;
+            vma.usage.swap += pagesz_kb;
             swap_offsets_.emplace_back(PAGE_SWAP_OFFSET(page_info));
             continue;
         }
@@ -454,7 +483,7 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_
         }
 
         if (KPAGEFLAG_THP(cur_page_flags)) {
-            vma.usage.thp += pagesz;
+            vma.usage.thp += pagesz_kb;
         }
 
         // skip unwanted pages from the count
@@ -484,22 +513,22 @@ bool ProcMemInfo::ReadVmaStats(int pagemap_fd, Vma& vma, bool get_wss, bool use_
             // This effectively makes vss = rss for the working set is requested.
             // The libpagemap implementation returns vss > rss for
             // working set, which doesn't make sense.
-            vma.usage.vss += pagesz;
+            vma.usage.vss += pagesz_kb;
         }
 
-        vma.usage.rss += pagesz;
-        vma.usage.uss += is_private ? pagesz : 0;
-        vma.usage.pss += pagesz / cur_page_counts;
+        vma.usage.rss += pagesz_kb;
+        vma.usage.uss += is_private ? pagesz_kb : 0;
+        vma.usage.pss += pagesz_kb / cur_page_counts;
         if (is_private) {
-            vma.usage.private_dirty += is_dirty ? pagesz : 0;
-            vma.usage.private_clean += is_dirty ? 0 : pagesz;
+            vma.usage.private_dirty += is_dirty ? pagesz_kb : 0;
+            vma.usage.private_clean += is_dirty ? 0 : pagesz_kb;
         } else {
-            vma.usage.shared_dirty += is_dirty ? pagesz : 0;
-            vma.usage.shared_clean += is_dirty ? 0 : pagesz;
+            vma.usage.shared_dirty += is_dirty ? pagesz_kb : 0;
+            vma.usage.shared_clean += is_dirty ? 0 : pagesz_kb;
         }
     }
     if (!get_wss) {
-        vma.usage.vss += pagesz * num_pages;
+        vma.usage.vss += pagesz_kb * num_pages;
     }
     return true;
 }
@@ -657,6 +686,70 @@ bool SmapsOrRollupPssFromFile(const std::string& path, uint64_t* pss) {
     // free getline() managed buffer
     free(line);
     return true;
+}
+
+Format GetFormat(std::string_view arg) {
+    if (arg == "json") {
+        return Format::JSON;
+    }
+    if (arg == "csv") {
+        return Format::CSV;
+    }
+    if (arg == "raw") {
+        return Format::RAW;
+    }
+    return Format::INVALID;
+}
+
+std::string EscapeCsvString(const std::string& raw) {
+    std::string ret;
+    for (auto it = raw.cbegin(); it != raw.cend(); it++) {
+        switch (*it) {
+            case '"':
+                ret += "\"";
+                break;
+            default:
+                ret += *it;
+                break;
+        }
+    }
+    return '"' + ret + '"';
+}
+
+std::string EscapeJsonString(const std::string& raw) {
+    std::string ret;
+    for (auto it = raw.cbegin(); it != raw.cend(); it++) {
+        switch (*it) {
+            case '\\':
+                ret += "\\\\";
+                break;
+            case '"':
+                ret += "\\\"";
+                break;
+            case '/':
+                ret += "\\/";
+                break;
+            case '\b':
+                ret += "\\b";
+                break;
+            case '\f':
+                ret += "\\f";
+                break;
+            case '\n':
+                ret += "\\n";
+                break;
+            case '\r':
+                ret += "\\r";
+                break;
+            case '\t':
+                ret += "\\t";
+                break;
+            default:
+                ret += *it;
+                break;
+        }
+    }
+    return '"' + ret + '"';
 }
 
 }  // namespace meminfo
