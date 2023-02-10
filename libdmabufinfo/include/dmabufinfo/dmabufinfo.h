@@ -88,13 +88,6 @@ struct DmaBuffer {
     }
 };
 
-// Read and return current dma buf objects from
-// DEBUGFS/dma_buf/bufinfo. The references to each dma buffer are not
-// populated here and will return an empty vector.
-// Returns false if something went wrong with the function, true otherwise.
-bool ReadDmaBufInfo(std::vector<DmaBuffer>* dmabufs,
-                    const std::string& path = "/sys/kernel/debug/dma_buf/bufinfo");
-
 // Read and return dmabuf objects for a given process without the help
 // of DEBUGFS
 // Returns false if something went wrong with the function, true otherwise.
@@ -130,7 +123,7 @@ bool ReadDmaBufPss(int pid, uint64_t* pss, const std::string& procfs_path = "/pr
 // Writes DmaBuffer info into an existing vector (which will be cleared first.)
 // Will include all DmaBuffers, whether thay are retained or mapped.
 // Returns true on success, otherwise false.
-bool ReadDmaBufs(std::vector<DmaBuffer>* bufs);
+bool ReadProcfsDmaBufs(std::vector<DmaBuffer>* bufs);
 
 }  // namespace dmabufinfo
 }  // namespace android
