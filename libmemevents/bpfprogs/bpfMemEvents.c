@@ -42,6 +42,11 @@ DEFINE_BPF_PROG("tracepoint/oom/mark_victim/ams", AID_ROOT, AID_SYSTEM, tp_ams)
     data->event_data.oom_kill.oom_score_adj = args->oom_score_adj;
     data->event_data.oom_kill.uid = args->uid;
     data->event_data.oom_kill.timestamp_ms = timestamp_ns / 1000000;  // Convert to milliseconds
+    data->event_data.oom_kill.total_vm_kb = args->total_vm;
+    data->event_data.oom_kill.anon_rss_kb = args->anon_rss;
+    data->event_data.oom_kill.file_rss_kb = args->file_rss;
+    data->event_data.oom_kill.shmem_rss_kb = args->shmem_rss;
+    data->event_data.oom_kill.pgtables_kb = args->pgtables;
 
     read_str((char*)args, args->__data_loc_comm, data->event_data.oom_kill.process_name,
              MEM_EVENT_PROC_NAME_LEN);
@@ -71,6 +76,36 @@ DEFINE_BPF_PROG("tracepoint/vmscan/mm_vmscan_direct_reclaim_end/lmkd", AID_ROOT,
     if (data == NULL) return 1;
 
     data->type = MEM_EVENT_DIRECT_RECLAIM_END;
+
+    bpf_lmkd_rb_submit(data);
+
+    return 0;
+}
+
+DEFINE_BPF_PROG("tracepoint/vmscan/mm_vmscan_kswapd_wake/lmkd", AID_ROOT, AID_SYSTEM,
+                tp_lmkd_kswapd_wake)
+(struct kswapd_wake_args* args) {
+    struct mem_event_t* data = bpf_lmkd_rb_reserve();
+    if (data == NULL) return 1;
+
+    data->type = MEM_EVENT_KSWAPD_WAKE;
+    data->event_data.kswapd_wake.node_id = args->nid;
+    data->event_data.kswapd_wake.zone_id = args->zid;
+    data->event_data.kswapd_wake.alloc_order = args->order;
+
+    bpf_lmkd_rb_submit(data);
+
+    return 0;
+}
+
+DEFINE_BPF_PROG("tracepoint/vmscan/mm_vmscan_kswapd_sleep/lmkd", AID_ROOT, AID_SYSTEM,
+                tp_lmkd_kswapd_sleep)
+(struct kswapd_sleep_args* args) {
+    struct mem_event_t* data = bpf_lmkd_rb_reserve();
+    if (data == NULL) return 1;
+
+    data->type = MEM_EVENT_KSWAPD_SLEEP;
+    data->event_data.kswapd_wake.node_id = args->nid;
 
     bpf_lmkd_rb_submit(data);
 
