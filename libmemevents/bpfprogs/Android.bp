@@ -17,10 +17,6 @@ bpf {
     include_dirs: [
         "system/memory/libmeminfo/libmemevents/include",
     ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
 }
 
 bpf {
@@ -28,9 +24,5 @@ bpf {
     srcs: ["bpfMemEventsTest.c"],
     include_dirs: [
         "system/memory/libmeminfo/libmemevents/include",
-    ],
-    cflags: [
-        "-Wall",
-        "-Werror",
     ],
 }
