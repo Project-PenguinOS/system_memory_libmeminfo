@@ -65,13 +65,15 @@ class ElfAlignmentTest :public ::testing::TestWithParam<std::string> {
         // Ignore VNDK APEXes. They are prebuilts from old branches, and would
         // only be used on devices with old vendor images.
         "/apex/com.android.vndk.v",
-        // This directory contains the trusty kernel.
-        // TODO(b/365240530): Remove this once 16K pages will work on the trusty kernel.
-        "/system_ext/etc/hw/",
+        // Ignore Trusty VM images as they don't run in userspace, so 16K is not
+        // required. See b/365240530 for more context.
+        "/system_ext/etc/vm/trusty_vm",
         // Ignore non-Android firmware images.
         "/odm/firmware",
         "/vendor/firmware",
-        "/vendor/firmware_mnt/image"
+        "/vendor/firmware_mnt/image",
+        // Ignore TEE binaries
+        "/apex/com.samsung.android.authfw.ta"
       };
 
       for (const auto& dir : ignored_directories) {
