@@ -143,6 +143,22 @@ void gen_lib_with_text_relocs_dyn_entry(const android::elf64::Elf64Binary& elf64
     android::elf64::Elf64Writer::WriteElf64File(copyElf64Binary, newSharedLibName);
 }
 
+// Generates a shared library which executable header indicates that there
+// are ZERO section headers.
+//
+// For example:
+//
+// $ readelf -h libtest_invalid-empty_shdr_table.so | grep Number
+// Number of program headers:         8
+// Number of section headers:         0 (0)
+void gen_lib_with_empty_shdr_table(const android::elf64::Elf64Binary& elf64Binary,
+                                   const std::string& newSharedLibName) {
+    android::elf64::Elf64Binary copyElf64Binary = elf64Binary;
+
+    copyElf64Binary.ehdr.e_shnum = 0;
+    android::elf64::Elf64Writer::WriteElf64File(copyElf64Binary, newSharedLibName);
+}
+
 void usage() {
     const std::string progname = getprogname();
 
@@ -180,6 +196,8 @@ int main(int argc, char* argv[]) {
         gen_lib_with_text_relocs_in_flags(elf64Binary, outputDir + "/libtest_invalid-textrels.so");
         gen_lib_with_text_relocs_dyn_entry(elf64Binary,
                                            outputDir + "/libtest_invalid-textrels2.so");
+        gen_lib_with_empty_shdr_table(elf64Binary,
+                                      outputDir + "/libtest_invalid-empty_shdr_table.so");
     }
 
     return 0;
