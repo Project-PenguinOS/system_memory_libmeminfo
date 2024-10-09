@@ -159,6 +159,25 @@ void gen_lib_with_empty_shdr_table(const android::elf64::Elf64Binary& elf64Binar
     android::elf64::Elf64Writer::WriteElf64File(copyElf64Binary, newSharedLibName);
 }
 
+// Generates a shared library which executable header has an invalid
+// section header offset.
+void gen_lib_with_unaligned_shdr_offset(const android::elf64::Elf64Binary& elf64Binary,
+                                        const std::string& newSharedLibName) {
+    android::elf64::Elf64Binary copyElf64Binary = elf64Binary;
+
+    // Set an invalid offset for the section headers.
+    copyElf64Binary.ehdr.e_shoff = copyElf64Binary.ehdr.e_shoff + 1;
+
+    std::cout << "Writing ELF64 binary to file " << newSharedLibName << std::endl;
+    android::elf64::Elf64Writer elf64Writer(newSharedLibName);
+    elf64Writer.WriteHeader(copyElf64Binary.ehdr);
+    elf64Writer.WriteProgramHeaders(copyElf64Binary.phdrs, copyElf64Binary.ehdr.e_phoff);
+    elf64Writer.WriteSections(copyElf64Binary.sections, copyElf64Binary.shdrs);
+
+    // Use the original e_shoff to store the section headers.
+    elf64Writer.WriteSectionHeaders(copyElf64Binary.shdrs, elf64Binary.ehdr.e_shoff);
+}
+
 void usage() {
     const std::string progname = getprogname();
 
@@ -198,6 +217,8 @@ int main(int argc, char* argv[]) {
                                            outputDir + "/libtest_invalid-textrels2.so");
         gen_lib_with_empty_shdr_table(elf64Binary,
                                       outputDir + "/libtest_invalid-empty_shdr_table.so");
+        gen_lib_with_unaligned_shdr_offset(elf64Binary,
+                                           outputDir + "/libtest_invalid-unaligned_shdr_offset.so");
     }
 
     return 0;
