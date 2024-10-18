@@ -15,8 +15,8 @@
  */
 
 #include <libelf64/elf64.h>
-#include <libelf64/elf64_writer.h>
 #include <libelf64/parse.h>
+#include <libelf64/writer.h>
 
 #include <iostream>
 #include <set>
@@ -217,7 +217,7 @@ void usage() {
     std::cout << "Usage: " << progname << " [shared_lib] [out_dir]...\n"
               << R"(
 Options:
-shared_lib       shared library that will be used as reference.
+shared_lib       elf64 shared library that will be used as reference.
 out_dir          the invalid shared libraries that are
                  generated will be placed in this directory.)"
               << std::endl;
