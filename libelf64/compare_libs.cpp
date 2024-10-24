@@ -50,32 +50,40 @@ int main(int argc, char* argv[]) {
     android::elf64::Elf64Binary elf64Binary1;
     android::elf64::Elf64Binary elf64Binary2;
 
-    if (android::elf64::Elf64Parser::ParseElfFile(baseSharedLibName1, elf64Binary1) &&
-        android::elf64::Elf64Parser::ParseElfFile(baseSharedLibName2, elf64Binary2)) {
-        if (android::elf64::Elf64Comparator::compare(elf64Binary1.ehdr, elf64Binary2.ehdr)) {
-            std::cout << "Executable Headers are equal" << std::endl;
-        } else {
-            std::cout << "Executable Headers are NOT equal" << std::endl;
-        }
+    bool parse = android::elf64::Elf64Parser::ParseElfFile(baseSharedLibName1, elf64Binary1);
+    if (!parse) {
+        std::cerr << "Failed to parse file " << baseSharedLibName1 << std::endl;
+        return EXIT_FAILURE;
+    }
 
-        if (android::elf64::Elf64Comparator::compare(elf64Binary1.phdrs, elf64Binary2.phdrs)) {
-            std::cout << "Program Headers are equal" << std::endl;
-        } else {
-            std::cout << "Program Headers are NOT equal" << std::endl;
-        }
+    parse = android::elf64::Elf64Parser::ParseElfFile(baseSharedLibName2, elf64Binary2);
+    if (!parse) {
+        std::cerr << "Failed to parse file " << baseSharedLibName2 << std::endl;
+        return EXIT_FAILURE;
+    }
 
-        if (android::elf64::Elf64Comparator::compare(elf64Binary1.shdrs, elf64Binary2.shdrs)) {
-            std::cout << "Section Headers are equal" << std::endl;
-        } else {
-            std::cout << "Section Headers are NOT equal" << std::endl;
-        }
+    if (android::elf64::Elf64Comparator::compare(elf64Binary1.ehdr, elf64Binary2.ehdr)) {
+        std::cout << "Executable Headers are equal" << std::endl;
+    } else {
+        std::cout << "Executable Headers are NOT equal" << std::endl;
+    }
 
-        if (android::elf64::Elf64Comparator::compare(elf64Binary1.sections,
-                                                     elf64Binary2.sections)) {
-            std::cout << "Sections are equal" << std::endl;
-        } else {
-            std::cout << "Sections are NOT equal" << std::endl;
-        }
+    if (android::elf64::Elf64Comparator::compare(elf64Binary1.phdrs, elf64Binary2.phdrs)) {
+        std::cout << "Program Headers are equal" << std::endl;
+    } else {
+        std::cout << "Program Headers are NOT equal" << std::endl;
+    }
+
+    if (android::elf64::Elf64Comparator::compare(elf64Binary1.shdrs, elf64Binary2.shdrs)) {
+        std::cout << "Section Headers are equal" << std::endl;
+    } else {
+        std::cout << "Section Headers are NOT equal" << std::endl;
+    }
+
+    if (android::elf64::Elf64Comparator::compare(elf64Binary1.sections, elf64Binary2.sections)) {
+        std::cout << "Sections are equal" << std::endl;
+    } else {
+        std::cout << "Sections are NOT equal" << std::endl;
     }
 
     return 0;
