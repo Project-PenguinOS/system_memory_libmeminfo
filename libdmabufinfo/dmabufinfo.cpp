@@ -105,7 +105,7 @@ static FdInfoResult ReadDmaBufFdInfo(pid_t pid, int fd, std::string* name, std::
 }
 
 // Public methods
-bool ReadDmaBufFdRefs(int pid, std::vector<DmaBuffer>* dmabufs,
+bool ReadDmaBufFdRefs(int pid, std::vector<DmaBuffer>& dmabufs,
                              const std::string& procfs_path) {
     constexpr char permission_err_msg[] =
             "Failed to read fdinfo - requires either PTRACE_MODE_READ or root depending on "
@@ -180,9 +180,9 @@ bool ReadDmaBufFdRefs(int pid, std::vector<DmaBuffer>* dmabufs,
             size = sb.st_blocks * 512;
         }
 
-        auto buf = std::find_if(dmabufs->begin(), dmabufs->end(),
+        auto buf = std::find_if(dmabufs.begin(), dmabufs.end(),
                                 [&inode](const DmaBuffer& dbuf) { return dbuf.inode() == inode; });
-        if (buf != dmabufs->end()) {
+        if (buf != dmabufs.end()) {
             if (buf->name() == "" || buf->name() == "<unknown>") buf->SetName(name);
             if (buf->exporter() == "" || buf->exporter() == "<unknown>") buf->SetExporter(exporter);
             if (buf->count() == 0) buf->SetCount(count);
@@ -190,14 +190,22 @@ bool ReadDmaBufFdRefs(int pid, std::vector<DmaBuffer>* dmabufs,
             continue;
         }
 
-        DmaBuffer& db = dmabufs->emplace_back(inode, size, count, exporter, name);
+        DmaBuffer& db = dmabufs.emplace_back(inode, size, count, exporter, name);
         db.AddFdRef(pid);
     }
 
     return true;
 }
 
-bool ReadDmaBufMapRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs,
+[[deprecated("Use reference for dmabuf vector")]]
+bool ReadDmaBufFdRefs(int pid, std::vector<DmaBuffer>* dmabufs,
+                             const std::string& procfs_path) {
+    if (!dmabufs) return false;
+
+    return ReadDmaBufFdRefs(pid, *dmabufs, procfs_path);
+}
+
+bool ReadDmaBufMapRefs(pid_t pid, std::vector<DmaBuffer>& dmabufs,
                               const std::string& procfs_path,
                               const std::string& dmabuf_sysfs_path) {
     std::string mapspath = ::android::base::StringPrintf("%s/%d/maps", procfs_path.c_str(), pid);
@@ -216,9 +224,9 @@ bool ReadDmaBufMapRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs,
         }
 
         auto buf = std::find_if(
-                dmabufs->begin(), dmabufs->end(),
+                dmabufs.begin(), dmabufs.end(),
                 [&mapinfo](const DmaBuffer& dbuf) { return dbuf.inode() == mapinfo.inode; });
-        if (buf != dmabufs->end()) {
+        if (buf != dmabufs.end()) {
             buf->AddMapRef(pid);
             return;
         }
@@ -241,7 +249,7 @@ bool ReadDmaBufMapRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs,
             size = mapinfo.end - mapinfo.start;
         }
 
-        DmaBuffer& dbuf = dmabufs->emplace_back(mapinfo.inode, size, 0, exporter, "<unknown>");
+        DmaBuffer& dbuf = dmabufs.emplace_back(mapinfo.inode, size, 0, exporter, "<unknown>");
         dbuf.AddMapRef(pid);
     };
 
@@ -255,9 +263,18 @@ bool ReadDmaBufMapRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs,
     return true;
 }
 
-bool ReadDmaBufInfo(pid_t pid, std::vector<DmaBuffer>* dmabufs, bool read_fdrefs,
+[[deprecated("Use reference for dmabuf vector")]]
+bool ReadDmaBufMapRefs(pid_t pid, std::vector<DmaBuffer>* dmabufs,
+                              const std::string& procfs_path,
+                              const std::string& dmabuf_sysfs_path) {
+    if (!dmabufs) return false;
+
+    return ReadDmaBufMapRefs(pid, *dmabufs, procfs_path, dmabuf_sysfs_path);
+}
+
+bool ReadDmaBufInfo(pid_t pid, std::vector<DmaBuffer>& dmabufs, bool read_fdrefs,
                     const std::string& procfs_path, const std::string& dmabuf_sysfs_path) {
-    dmabufs->clear();
+    dmabufs.clear();
 
     if (read_fdrefs) {
         if (!ReadDmaBufFdRefs(pid, dmabufs, procfs_path)) {
@@ -273,13 +290,21 @@ bool ReadDmaBufInfo(pid_t pid, std::vector<DmaBuffer>* dmabufs, bool read_fdrefs
     return true;
 }
 
-bool ReadProcfsDmaBufs(std::vector<DmaBuffer>* bufs) {
-    bufs->clear();
+[[deprecated("Use reference for dmabuf vector")]]
+bool ReadDmaBufInfo(pid_t pid, std::vector<DmaBuffer>* dmabufs, bool read_fdrefs,
+                    const std::string& procfs_path, const std::string& dmabuf_sysfs_path) {
+    if (!dmabufs) return false;
+
+    return ReadDmaBufInfo(pid, *dmabufs, read_fdrefs, procfs_path, dmabuf_sysfs_path);
+}
+
+bool ReadProcfsDmaBufs(std::vector<DmaBuffer>& bufs) {
+    bufs.clear();
 
     std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir("/proc"), closedir);
     if (!dir) {
         LOG(ERROR) << "Failed to open /proc directory";
-        bufs->clear();
+        bufs.clear();
         return false;
     }
 
@@ -302,6 +327,13 @@ bool ReadProcfsDmaBufs(std::vector<DmaBuffer>* bufs) {
     }
 
     return true;
+}
+
+[[deprecated("Use reference for dmabuf vector")]]
+bool ReadProcfsDmaBufs(std::vector<DmaBuffer>* bufs) {
+    if (!bufs) return false;
+
+    return ReadProcfsDmaBufs(*bufs);
 }
 
 }  // namespace dmabufinfo

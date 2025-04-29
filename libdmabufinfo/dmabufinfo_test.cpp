@@ -324,7 +324,7 @@ TEST_F(DmaBufProcessStatsTest, TestReadDmaBufInfo) {
     AddSysfsDmaBufStats(4, 1024);  // Dmabuf 2
 
     std::vector<DmaBuffer> dmabufs;
-    ASSERT_TRUE(ReadDmaBufInfo(pid, &dmabufs, true, procfs_path, dmabuf_sysfs_path));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, true, procfs_path, dmabuf_sysfs_path));
 
     ASSERT_EQ(dmabufs.size(), 2u);
 
@@ -354,7 +354,7 @@ TEST_F(DmaBufProcessStatsTest, TestReadDmaBufFdRefs) {
     AddFdInfo(3, 1024, true);  // Dmabuf 2
 
     std::vector<DmaBuffer> dmabufs;
-    ASSERT_TRUE(ReadDmaBufFdRefs(pid, &dmabufs, procfs_path));
+    ASSERT_TRUE(ReadDmaBufFdRefs(pid, dmabufs, procfs_path));
     ASSERT_EQ(dmabufs.size(), 2u);
 
     const auto& dmabuf1 = std::find_if(dmabufs.begin(), dmabufs.end(),
@@ -401,7 +401,7 @@ TEST_F(DmaBufProcessStatsTest, TestReadDmaBufMapRefs) {
     AddSysfsDmaBufStats(3, 2048);  // Dmabuf 2
 
     std::vector<DmaBuffer> dmabufs;
-    ASSERT_TRUE(ReadDmaBufMapRefs(pid, &dmabufs, procfs_path, dmabuf_sysfs_path));
+    ASSERT_TRUE(ReadDmaBufMapRefs(pid, dmabufs, procfs_path, dmabuf_sysfs_path));
     ASSERT_EQ(dmabufs.size(), 2u);
 
     const auto& dmabuf1 = std::find_if(dmabufs.begin(), dmabufs.end(),
@@ -474,17 +474,17 @@ class DmaBufTester : public ::testing::Test {
         return unique_fd{fd};
     }
 
-    void readAndCheckDmaBuffer(std::vector<DmaBuffer>* dmabufs, pid_t pid, const std::string name,
+    void readAndCheckDmaBuffer(std::vector<DmaBuffer>& dmabufs, pid_t pid, const std::string name,
                                size_t fdrefs_size, size_t maprefs_size, const std::string exporter,
                                size_t refcount, uint64_t buf_size, bool expectFdrefs,
                                bool expectMapRefs) {
         EXPECT_TRUE(ReadDmaBufInfo(pid, dmabufs));
-        EXPECT_EQ(dmabufs->size(), 1UL);
-        EXPECT_ONE_BUF_EQ(dmabufs->begin(), name, fdrefs_size, maprefs_size, exporter, refcount,
+        EXPECT_EQ(dmabufs.size(), 1UL);
+        EXPECT_ONE_BUF_EQ(dmabufs.begin(), name, fdrefs_size, maprefs_size, exporter, refcount,
                           buf_size);
         // Make sure the buffer has the right pid too.
-        EXPECT_PID_IN_FDREFS(dmabufs->begin(), pid, expectFdrefs);
-        EXPECT_PID_IN_MAPREFS(dmabufs->begin(), pid, expectMapRefs);
+        EXPECT_PID_IN_FDREFS(dmabufs.begin(), pid, expectFdrefs);
+        EXPECT_PID_IN_MAPREFS(dmabufs.begin(), pid, expectMapRefs);
     }
 
     bool checkPidRef(DmaBuffer& dmabuf, pid_t pid, int expectFdrefs) {
@@ -547,7 +547,7 @@ TEST_F(DmaBufTester, TestFdRef) {
         // Allocate one buffer and make sure the library can see it
         unique_fd buf = allocate(4096, "dmabuftester-4k");
         ASSERT_GT(buf, 0) << "Allocated buffer is invalid";
-        ASSERT_TRUE(ReadDmaBufInfo(pid, &dmabufs));
+        ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
 
         EXPECT_EQ(dmabufs.size(), 1UL);
         EXPECT_ONE_BUF_EQ(dmabufs.begin(), "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL);
@@ -557,7 +557,7 @@ TEST_F(DmaBufTester, TestFdRef) {
     }
 
     // Now make sure the buffer has disappeared
-    ASSERT_TRUE(ReadDmaBufInfo(pid, &dmabufs));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
     EXPECT_TRUE(dmabufs.empty());
 }
 
@@ -578,7 +578,7 @@ TEST_F(DmaBufTester, TestMapRef) {
         ASSERT_GT(buf, 0) << "Allocated buffer is invalid";
         auto ptr = mmap(0, 4096, PROT_READ, MAP_SHARED, buf, 0);
         ASSERT_NE(ptr, MAP_FAILED);
-        ASSERT_TRUE(ReadDmaBufInfo(pid, &dmabufs));
+        ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
 
         EXPECT_EQ(dmabufs.size(), 1UL);
         EXPECT_ONE_BUF_EQ(dmabufs.begin(), "dmabuftester-4k", 1UL, 1UL, "ion", 2UL, 4096ULL);
@@ -589,7 +589,7 @@ TEST_F(DmaBufTester, TestMapRef) {
 
         // close the file descriptor and re-read the stats
         buf.reset(-1);
-        ASSERT_TRUE(ReadDmaBufInfo(pid, &dmabufs));
+        ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
 
         EXPECT_EQ(dmabufs.size(), 1UL);
         EXPECT_ONE_BUF_EQ(dmabufs.begin(), "<unknown>", 0UL, 1UL, "<unknown>", 0UL, 4096ULL);
@@ -602,7 +602,7 @@ TEST_F(DmaBufTester, TestMapRef) {
     }
 
     // Now make sure the buffer has disappeared
-    ASSERT_TRUE(ReadDmaBufInfo(pid, &dmabufs));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
     EXPECT_TRUE(dmabufs.empty());
 }
 
@@ -624,32 +624,32 @@ TEST_F(DmaBufTester, TestSharedfd) {
         // Allocate one buffer and make sure the library can see it
         unique_fd buf = allocate(4096, "dmabuftester-4k");
         ASSERT_GT(buf, 0) << "Allocated buffer is invalid";
-        readAndCheckDmaBuffer(&dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
+        readAndCheckDmaBuffer(dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
                               false);
 
         ASSERT_TRUE(sharer.sendfd(buf));
-        readAndCheckDmaBuffer(&dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 2UL, 4096ULL, true,
+        readAndCheckDmaBuffer(dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 2UL, 4096ULL, true,
                               false);
         EXPECT_TRUE(checkPidRef(dmabufs[0], pid, 1));
-        readAndCheckDmaBuffer(&dmabufs, sharer.pid(), "dmabuftester-4k", 1UL, 0UL, "ion", 2UL,
+        readAndCheckDmaBuffer(dmabufs, sharer.pid(), "dmabuftester-4k", 1UL, 0UL, "ion", 2UL,
                               4096ULL, true, false);
         EXPECT_TRUE(checkPidRef(dmabufs[0], sharer.pid(), 1));
 
         ASSERT_TRUE(sharer.sendfd(buf));
-        readAndCheckDmaBuffer(&dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 3UL, 4096ULL, true,
+        readAndCheckDmaBuffer(dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 3UL, 4096ULL, true,
                               false);
         EXPECT_TRUE(checkPidRef(dmabufs[0], pid, 1));
-        readAndCheckDmaBuffer(&dmabufs, sharer.pid(), "dmabuftester-4k", 1UL, 0UL, "ion", 3UL,
+        readAndCheckDmaBuffer(dmabufs, sharer.pid(), "dmabuftester-4k", 1UL, 0UL, "ion", 3UL,
                               4096ULL, true, false);
         EXPECT_TRUE(checkPidRef(dmabufs[0], sharer.pid(), 2));
 
         ASSERT_TRUE(sharer.kill());
-        readAndCheckDmaBuffer(&dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
+        readAndCheckDmaBuffer(dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
                               false);
     }
 
     // Now make sure the buffer has disappeared
-    ASSERT_TRUE(ReadDmaBufInfo(pid, &dmabufs));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
     EXPECT_TRUE(dmabufs.empty());
 }
 
@@ -669,22 +669,22 @@ TEST_F(DmaBufTester, DupFdTest) {
         // Allocate one buffer and make sure the library can see it
         unique_fd buf = allocate(4096, "dmabuftester-4k");
         ASSERT_GT(buf, 0) << "Allocated buffer is invalid";
-        readAndCheckDmaBuffer(&dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
+        readAndCheckDmaBuffer(dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
                               false);
 
         unique_fd buf2{dup(buf)};
-        readAndCheckDmaBuffer(&dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 2UL, 4096ULL, true,
+        readAndCheckDmaBuffer(dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 2UL, 4096ULL, true,
                               false);
         EXPECT_TRUE(checkPidRef(dmabufs[0], pid, 2));
 
         close(buf2.release());
-        readAndCheckDmaBuffer(&dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
+        readAndCheckDmaBuffer(dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
                               false);
         EXPECT_TRUE(checkPidRef(dmabufs[0], pid, 1));
     }
 
     // Now make sure the buffer has disappeared
-    ASSERT_TRUE(ReadDmaBufInfo(pid, &dmabufs));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
     EXPECT_TRUE(dmabufs.empty());
 }
 
@@ -704,21 +704,21 @@ TEST_F(DmaBufTester, ForkTest) {
         // Allocate one buffer and make sure the library can see it
         unique_fd buf = allocate(4096, "dmabuftester-4k");
         ASSERT_GT(buf, 0) << "Allocated buffer is invalid";
-        readAndCheckDmaBuffer(&dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
+        readAndCheckDmaBuffer(dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
                               false);
         fd_sharer sharer{};
         ASSERT_TRUE(sharer.ok());
-        readAndCheckDmaBuffer(&dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 2UL, 4096ULL, true,
+        readAndCheckDmaBuffer(dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 2UL, 4096ULL, true,
                               false);
-        readAndCheckDmaBuffer(&dmabufs, sharer.pid(), "dmabuftester-4k", 1UL, 0UL, "ion", 2UL,
+        readAndCheckDmaBuffer(dmabufs, sharer.pid(), "dmabuftester-4k", 1UL, 0UL, "ion", 2UL,
                               4096ULL, true, false);
         ASSERT_TRUE(sharer.kill());
-        readAndCheckDmaBuffer(&dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
+        readAndCheckDmaBuffer(dmabufs, pid, "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL, true,
                               false);
     }
 
     // Now make sure the buffer has disappeared
-    ASSERT_TRUE(ReadDmaBufInfo(pid, &dmabufs));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
     EXPECT_TRUE(dmabufs.empty());
 }
 

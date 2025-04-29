@@ -290,12 +290,12 @@ int main(int argc, char* argv[]) {
 
     std::vector<DmaBuffer> bufs;
     if (pid != -1) {
-        if (!ReadDmaBufInfo(pid, &bufs)) {
+        if (!ReadDmaBufInfo(pid, bufs)) {
             fprintf(stderr, "Unable to read dmabuf info for %d\n", pid);
             exit(EXIT_FAILURE);
         }
     } else {
-        if (!ReadProcfsDmaBufs(&bufs)) {
+        if (!ReadProcfsDmaBufs(bufs)) {
             fprintf(stderr, "Failed to ReadProcfsDmaBufs, check logcat for info\n");
             exit(EXIT_FAILURE);
         }
