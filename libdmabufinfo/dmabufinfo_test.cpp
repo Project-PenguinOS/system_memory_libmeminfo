@@ -35,7 +35,7 @@
 #include <ion/ion.h>
 #include <unistd.h>
 
-#include <dmabufinfo/dmabuf_sysfs_stats.h>
+#include "dmabuf_sysfs_stats.h"
 #include <dmabufinfo/dmabufinfo.h>
 
 using namespace ::android::dmabufinfo;
@@ -220,8 +220,8 @@ TEST_F(DmaBufSysfsStatsParser, TestReadDmaBufSysfsStats) {
         ASSERT_TRUE(android::base::WriteStringToFile(exp_name, exp_name_path));
     }
 
-    DmabufSysfsStats stats;
-    ASSERT_TRUE(GetDmabufSysfsStats(&stats, buffer_stats_path.c_str()));
+    DmabufPerBufferStats stats;
+    ASSERT_TRUE(GetDmabufSysfsStats(stats, buffer_stats_path.c_str()));
 
     auto buffer_stats = stats.buffer_stats();
     ASSERT_EQ(buffer_stats.size(), 10UL);
@@ -243,10 +243,6 @@ TEST_F(DmaBufSysfsStatsParser, TestReadDmaBufSysfsStats) {
 
     auto total_count = stats.total_count();
     EXPECT_EQ(total_count, 10UL);
-
-    uint64_t total_exported;
-    EXPECT_TRUE(GetDmabufTotalExportedKb(&total_exported, buffer_stats_path.c_str()));
-    EXPECT_EQ(total_exported, 40UL);
 }
 
 class DmaBufProcessStatsTest : public ::testing::Test {
@@ -323,8 +319,11 @@ TEST_F(DmaBufProcessStatsTest, TestReadDmaBufInfo) {
     AddSysfsDmaBufStats(2, 2048);  // Dmabuf 1
     AddSysfsDmaBufStats(4, 1024);  // Dmabuf 2
 
+    android::dmabufinfo::DmabufPerBufferStats stats;
+    ASSERT_TRUE(GetDmabufSysfsStats(stats, dmabuf_sysfs_path));
+
     std::vector<DmaBuffer> dmabufs;
-    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, true, procfs_path, dmabuf_sysfs_path));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, stats, true, procfs_path));
 
     ASSERT_EQ(dmabufs.size(), 2u);
 
@@ -400,8 +399,11 @@ TEST_F(DmaBufProcessStatsTest, TestReadDmaBufMapRefs) {
     AddSysfsDmaBufStats(2, 1024);  // Dmabuf 1
     AddSysfsDmaBufStats(3, 2048);  // Dmabuf 2
 
+    android::dmabufinfo::DmabufPerBufferStats stats;
+    ASSERT_TRUE(GetDmabufSysfsStats(stats, dmabuf_sysfs_path));
+
     std::vector<DmaBuffer> dmabufs;
-    ASSERT_TRUE(ReadDmaBufMapRefs(pid, dmabufs, procfs_path, dmabuf_sysfs_path));
+    ASSERT_TRUE(ReadDmaBufMapRefs(pid, dmabufs, stats, procfs_path));
     ASSERT_EQ(dmabufs.size(), 2u);
 
     const auto& dmabuf1 = std::find_if(dmabufs.begin(), dmabufs.end(),
@@ -478,7 +480,7 @@ class DmaBufTester : public ::testing::Test {
                                size_t fdrefs_size, size_t maprefs_size, const std::string exporter,
                                size_t refcount, uint64_t buf_size, bool expectFdrefs,
                                bool expectMapRefs) {
-        EXPECT_TRUE(ReadDmaBufInfo(pid, dmabufs));
+        EXPECT_TRUE(ReadDmaBufInfo(pid, dmabufs, DmabufPerBufferStats()));
         EXPECT_EQ(dmabufs.size(), 1UL);
         EXPECT_ONE_BUF_EQ(dmabufs.begin(), name, fdrefs_size, maprefs_size, exporter, refcount,
                           buf_size);
@@ -547,7 +549,7 @@ TEST_F(DmaBufTester, TestFdRef) {
         // Allocate one buffer and make sure the library can see it
         unique_fd buf = allocate(4096, "dmabuftester-4k");
         ASSERT_GT(buf, 0) << "Allocated buffer is invalid";
-        ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
+        ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, DmabufPerBufferStats()));
 
         EXPECT_EQ(dmabufs.size(), 1UL);
         EXPECT_ONE_BUF_EQ(dmabufs.begin(), "dmabuftester-4k", 1UL, 0UL, "ion", 1UL, 4096ULL);
@@ -557,7 +559,7 @@ TEST_F(DmaBufTester, TestFdRef) {
     }
 
     // Now make sure the buffer has disappeared
-    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, DmabufPerBufferStats()));
     EXPECT_TRUE(dmabufs.empty());
 }
 
@@ -578,7 +580,7 @@ TEST_F(DmaBufTester, TestMapRef) {
         ASSERT_GT(buf, 0) << "Allocated buffer is invalid";
         auto ptr = mmap(0, 4096, PROT_READ, MAP_SHARED, buf, 0);
         ASSERT_NE(ptr, MAP_FAILED);
-        ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
+        ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, DmabufPerBufferStats()));
 
         EXPECT_EQ(dmabufs.size(), 1UL);
         EXPECT_ONE_BUF_EQ(dmabufs.begin(), "dmabuftester-4k", 1UL, 1UL, "ion", 2UL, 4096ULL);
@@ -589,7 +591,7 @@ TEST_F(DmaBufTester, TestMapRef) {
 
         // close the file descriptor and re-read the stats
         buf.reset(-1);
-        ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
+        ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, DmabufPerBufferStats()));
 
         EXPECT_EQ(dmabufs.size(), 1UL);
         EXPECT_ONE_BUF_EQ(dmabufs.begin(), "<unknown>", 0UL, 1UL, "<unknown>", 0UL, 4096ULL);
@@ -602,7 +604,7 @@ TEST_F(DmaBufTester, TestMapRef) {
     }
 
     // Now make sure the buffer has disappeared
-    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, DmabufPerBufferStats()));
     EXPECT_TRUE(dmabufs.empty());
 }
 
@@ -649,7 +651,7 @@ TEST_F(DmaBufTester, TestSharedfd) {
     }
 
     // Now make sure the buffer has disappeared
-    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, DmabufPerBufferStats()));
     EXPECT_TRUE(dmabufs.empty());
 }
 
@@ -684,7 +686,7 @@ TEST_F(DmaBufTester, DupFdTest) {
     }
 
     // Now make sure the buffer has disappeared
-    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, DmabufPerBufferStats()));
     EXPECT_TRUE(dmabufs.empty());
 }
 
@@ -718,7 +720,7 @@ TEST_F(DmaBufTester, ForkTest) {
     }
 
     // Now make sure the buffer has disappeared
-    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs));
+    ASSERT_TRUE(ReadDmaBufInfo(pid, dmabufs, DmabufPerBufferStats()));
     EXPECT_TRUE(dmabufs.empty());
 }
 
