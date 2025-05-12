@@ -40,3 +40,13 @@ libbpf_prog {
     ],
     relative_install_path: "memevents",
 }
+
+libbpf_prog {
+    name: "bpfMemEventsTest.bpf",
+    srcs: ["bpfMemEventsTest.c"],
+    header_libs: [
+        "android_bpf_defs",
+        "libmemevents_headers",
+    ],
+    relative_install_path: "memevents",
+}
