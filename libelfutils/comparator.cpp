@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include <libelf64/comparator.h>
+#include <libelfutils/comparator.h>
 
-#include <libelf64/elf64.h>
+#include <libelfutils/elf_binary.h>
 
 #include <cstring>
 #include <iostream>
@@ -26,7 +26,7 @@
 #include <elf.h>
 
 namespace android {
-namespace elf64 {
+namespace elfutils {
 
 static void printEhdrDiff(const std::string& name, unsigned long long hdrField1,
                           unsigned long long hdrField2) {
@@ -305,5 +305,5 @@ bool Elf64Comparator::compare(const std::vector<Elf64_Sc>& sections1,
     return equal;
 }
 
-}  // namespace elf64
+}  // namespace elfutils
 }  // namespace android
