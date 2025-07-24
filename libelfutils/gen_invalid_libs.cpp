@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include <libelfutils/elf_binary.h>
-#include <libelfutils/parse.h>
-#include <libelfutils/writer.h>
+#include <elfutils/elf-file.h>
+#include <elfutils/parse.h>
+#include <elfutils/writer.h>
 
 #include <iostream>
 #include <set>

@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License. */
 
-#include <libelfutils/iter.h>
-#include <libelfutils/parse.h>
+#include <elfutils/iter.h>
+#include <elfutils/parse.h>
 
 #include <filesystem>
 

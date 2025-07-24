@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include <libelfutils/comparator.h>
+#include <elfutils/comparator.h>
 
-#include <libelfutils/elf_binary.h>
+#include <elfutils/elf-file.h>
 
 #include <cstring>
 #include <iostream>

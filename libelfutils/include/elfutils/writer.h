@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <libelfutils/elf_binary.h>
+#include <elfutils/elf-file.h>
 
 #include <stdint.h>
 #include <fstream>

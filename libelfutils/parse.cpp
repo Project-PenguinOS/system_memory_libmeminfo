@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License. */
 
-#include <libelfutils/parse.h>
+#include <elfutils/parse.h>
 
 #include <elf.h>
 

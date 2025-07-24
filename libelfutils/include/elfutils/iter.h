@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <libelfutils/parse.h>
+#include <elfutils/parse.h>
 
 #include <functional>
 
