@@ -40,18 +40,3 @@ cc_library {
         "-Werror",
     ],
 }
-
-cc_binary {
-    name: "compare_libs",
-    host_supported: true,
-    srcs: [
-        "compare_libs.cpp",
-    ],
-    static_libs: [
-        "libelfutils",
-    ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-}
