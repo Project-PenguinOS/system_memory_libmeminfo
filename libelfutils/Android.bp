@@ -29,6 +29,7 @@ cc_library {
     ],
     srcs: [
         "comparator.cpp",
+        "elf-file.cpp",
         "iter.cpp",
         "parse.cpp",
         "writer.cpp",
