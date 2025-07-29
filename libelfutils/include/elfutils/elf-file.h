@@ -73,13 +73,21 @@ class ElfFile {
   public:
     static std::unique_ptr<ElfFile> create(const std::string& path);
     virtual ~ElfFile() = default;
+    virtual bool is32Bit() const = 0;
+    virtual bool is64Bit() const = 0;
+    virtual const std::string& getPath() const = 0;
 };
+
+// Forward declare ElfParser so that we can friend it
+template <typename>
+class ElfParser;
 
 // Expose the concrete implementation for use by classes that operate on ELF files
 // e.g. ElfParser, ElfWriter, ElfComparator, ...
 template <typename Ehdr_t, typename Phdr_t, typename Shdr_t, typename Dyn_t>
 class ElfFileImpl : public ElfFile {
   public:
+    using ElfFile_t = ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>;
     using Elf_Ehdr = Ehdr_t;
     using Elf_Phdr = Phdr_t;
     using Elf_Shdr = Shdr_t;
@@ -87,12 +95,20 @@ class ElfFileImpl : public ElfFile {
 
     ElfFileImpl(const std::string& path) : mPath(path) {}
 
+    bool is32Bit() const override { return std::is_same<Ehdr_t, Elf32_Ehdr>::value; }
+    bool is64Bit() const override { return std::is_same<Ehdr_t, Elf64_Ehdr>::value; }
+    const std::string& getPath() const override { return mPath; }
+
   private:
     Elf_Ehdr mEhdr;
     std::vector<Elf_Phdr> mPhdrs;
     std::vector<Elf_Shdr> mShdrs;
     std::vector<Elf_Sc> mSections;
     const std::string mPath;
+
+    // Grant friendship to ElfParserImpl as it needs to populate the ElfFileImpl fields.
+    template <typename>
+    friend class ElfParser;
 };
 
 using Elf32_File = ElfFileImpl<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr, Elf32_Dyn>;
