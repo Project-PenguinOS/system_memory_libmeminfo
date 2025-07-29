@@ -95,6 +95,7 @@ class ElfFileImpl : public ElfFile {
     using Elf_Dyn = Dyn_t;
 
     ElfFileImpl(const std::string& path) : mPath(path) {}
+    virtual ~ElfFileImpl() = default;
 
     bool is32Bit() const override { return std::is_same<Ehdr_t, Elf32_Ehdr>::value; }
     bool is64Bit() const override { return std::is_same<Ehdr_t, Elf64_Ehdr>::value; }
@@ -106,7 +107,11 @@ class ElfFileImpl : public ElfFile {
     const std::vector<Phdr_t>& getPhdrs() const { return mPhdrs; }
     const std::vector<Shdr_t>& getShdrs() const { return mShdrs; }
 
-  private:
+    // Methods for manipulating the dynamic section
+    bool getDynamicEntries(std::vector<Elf_Dyn>& entries) const;
+    bool setDynamicEntries(const std::vector<Elf_Dyn>& entries);
+
+  protected:
     Elf_Ehdr mEhdr;
     std::vector<Elf_Phdr> mPhdrs;
     std::vector<Elf_Shdr> mShdrs;

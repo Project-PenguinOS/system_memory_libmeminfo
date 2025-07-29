@@ -20,6 +20,7 @@
 
 #include <stdint.h>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -40,12 +41,12 @@ class ElfWriter {
     using Elf_Phdr = typename ElfFile_t::Elf_Phdr;
     using Elf_Shdr = typename ElfFile_t::Elf_Shdr;
 
-    bool writeElfHeader() {
+    bool writeElfHeader(std::optional<uint64_t> ehdrOffset = std::nullopt) {
         if (!mOutStream) {
             return false;
         }
 
-        mOutStream.seekp(0);
+        mOutStream.seekp(ehdrOffset.value_or(0));
         if (!mOutStream) {
             return false;
         }
@@ -55,12 +56,12 @@ class ElfWriter {
         return !!mOutStream;
     }
 
-    bool writeProgramHeaders() {
+    bool writeProgramHeaders(std::optional<uint64_t> phdrOffset = std::nullopt) {
         if (!mOutStream) {
             return false;
         }
 
-        mOutStream.seekp(mElfFile.getEhdr().e_phoff);
+        mOutStream.seekp(phdrOffset.value_or(mElfFile.getEhdr().e_phoff));
         if (!mOutStream) {
             return false;
         }
@@ -72,12 +73,12 @@ class ElfWriter {
         return !!mOutStream;
     }
 
-    bool writeSectionHeaders() {
+    bool writeSectionHeaders(std::optional<uint64_t> shdrOffset = std::nullopt) {
         if (!mOutStream) {
             return false;
         }
 
-        mOutStream.seekp(mElfFile.getEhdr().e_shoff);
+        mOutStream.seekp(shdrOffset.value_or(mElfFile.getEhdr().e_shoff));
         if (!mOutStream) {
             return false;
         }
@@ -89,12 +90,20 @@ class ElfWriter {
         return !!mOutStream;
     }
 
-    bool writeSections() {
+    bool writeSections(std::vector<uint64_t> shdrOffsets = {}) {
         if (!mOutStream) {
             return false;
         }
 
-        const auto& shdrs = mElfFile.getShdrs();
+        std::vector<uint64_t> offsets;
+        if (!shdrOffsets.empty()) {
+            offsets = shdrOffsets;
+        } else {
+            for (const auto& shdr : mElfFile.getShdrs()) {
+                offsets.push_back(shdr.sh_offset);
+            }
+        }
+
         const auto& sections = mElfFile.getSections();
 
         for (const auto& section : sections) {
@@ -102,7 +111,7 @@ class ElfWriter {
                 continue;
             }
 
-            mOutStream.seekp(shdrs[section.index].sh_offset);
+            mOutStream.seekp(offsets[section.index]);
             mOutStream.write(section.data.data(), section.size);
         }
 

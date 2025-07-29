@@ -75,6 +75,44 @@ std::unique_ptr<ElfFile> ElfFile::create(const std::string& path) {
     return {};
 }
 
+template <typename Ehdr_t, typename Phdr_t, typename Shdr_t, typename Dyn_t>
+bool ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>::getDynamicEntries(
+        std::vector<Elf_Dyn>& entries) const {
+    for (size_t i = 0; i < mShdrs.size(); ++i) {
+        if (mShdrs[i].sh_type == SHT_DYNAMIC) {
+            const auto& dynamicSection = mSections[i];
+
+            const Elf_Dyn* dyn = reinterpret_cast<const Elf_Dyn*>(dynamicSection.data.data());
+            size_t count = dynamicSection.size / sizeof(Elf_Dyn);
+
+            entries.assign(dyn, dyn + count);
+
+            return true;
+        }
+    }
+    return false;
+}
+
+template <typename Ehdr_t, typename Phdr_t, typename Shdr_t, typename Dyn_t>
+bool ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>::setDynamicEntries(
+        const std::vector<Elf_Dyn>& entries) {
+    for (size_t i = 0; i < mShdrs.size(); ++i) {
+        if (mShdrs[i].sh_type == SHT_DYNAMIC) {
+            auto& dynamicSection = mSections[i];
+
+            dynamicSection.size = entries.size() * sizeof(Elf_Dyn);
+            dynamicSection.data.resize(dynamicSection.size);
+
+            memcpy(dynamicSection.data.data(), entries.data(), dynamicSection.size);
+
+            mShdrs[i].sh_size = dynamicSection.size;
+
+            return true;
+        }
+    }
+    return false;
+}
+
 // Explicitly instantiate the templates for 32-bit and 64-bit ELF files.
 template class ElfFileImpl<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr, Elf32_Dyn>;
 template class ElfFileImpl<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr, Elf64_Dyn>;
