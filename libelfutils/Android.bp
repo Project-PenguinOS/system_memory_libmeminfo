@@ -31,7 +31,6 @@ cc_library {
         "comparator.cpp",
         "elf-file.cpp",
         "iter.cpp",
-        "writer.cpp",
     ],
     shared_libs: [
         "libbase",

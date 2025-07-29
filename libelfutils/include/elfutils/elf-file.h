@@ -76,6 +76,7 @@ class ElfFile {
     virtual bool is32Bit() const = 0;
     virtual bool is64Bit() const = 0;
     virtual const std::string& getPath() const = 0;
+    virtual const std::vector<Elf_Sc>& getSections() const = 0;
 };
 
 // Forward declare ElfParser so that we can friend it
@@ -98,6 +99,12 @@ class ElfFileImpl : public ElfFile {
     bool is32Bit() const override { return std::is_same<Ehdr_t, Elf32_Ehdr>::value; }
     bool is64Bit() const override { return std::is_same<Ehdr_t, Elf64_Ehdr>::value; }
     const std::string& getPath() const override { return mPath; }
+    const std::vector<Elf_Sc>& getSections() const override { return mSections; }
+
+    // Const accessors for serialization and inspection
+    const Ehdr_t& getEhdr() const { return mEhdr; }
+    const std::vector<Phdr_t>& getPhdrs() const { return mPhdrs; }
+    const std::vector<Shdr_t>& getShdrs() const { return mShdrs; }
 
   private:
     Elf_Ehdr mEhdr;
