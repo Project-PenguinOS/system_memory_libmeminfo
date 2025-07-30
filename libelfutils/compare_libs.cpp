@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include <libelf64/comparator.h>
-#include <libelf64/elf64.h>
-#include <libelf64/parse.h>
+#include <elfutils/comparator.h>
+#include <elfutils/elf-file.h>
+#include <elfutils/parse.h>
 
 #include <iostream>
 #include <set>
@@ -24,11 +24,10 @@
 #include <vector>
 
 #include <elf.h>
+#include <libgen.h>
 #include <stdlib.h>
 
-void usage() {
-    const std::string progname = getprogname();
-
+void usage(char* progname) {
     std::cout << "Usage: " << progname << " [shared_lib_1] [shared_lib_2]\n"
               << R"(
 Options:
@@ -40,47 +39,47 @@ shared_lib_2    elf64 shared library to compare with shared_lib_1
 // Compare ELF64 binaries (shared libraries, executables).
 int main(int argc, char* argv[]) {
     if (argc < 3) {
-        usage();
+        usage(basename(argv[0]));
         return EXIT_FAILURE;
     }
 
     std::string baseSharedLibName1(argv[1]);
     std::string baseSharedLibName2(argv[2]);
 
-    android::elf64::Elf64Binary elf64Binary1;
-    android::elf64::Elf64Binary elf64Binary2;
+    android::elfutils::Elf64Binary elf64Binary1;
+    android::elfutils::Elf64Binary elf64Binary2;
 
-    bool parse = android::elf64::Elf64Parser::ParseElfFile(baseSharedLibName1, elf64Binary1);
+    bool parse = android::elfutils::Elf64Parser::ParseElfFile(baseSharedLibName1, elf64Binary1);
     if (!parse) {
         std::cerr << "Failed to parse file " << baseSharedLibName1 << std::endl;
         return EXIT_FAILURE;
     }
 
-    parse = android::elf64::Elf64Parser::ParseElfFile(baseSharedLibName2, elf64Binary2);
+    parse = android::elfutils::Elf64Parser::ParseElfFile(baseSharedLibName2, elf64Binary2);
     if (!parse) {
         std::cerr << "Failed to parse file " << baseSharedLibName2 << std::endl;
         return EXIT_FAILURE;
     }
 
-    if (android::elf64::Elf64Comparator::compare(elf64Binary1.ehdr, elf64Binary2.ehdr)) {
+    if (android::elfutils::Elf64Comparator::compare(elf64Binary1.ehdr, elf64Binary2.ehdr)) {
         std::cout << "Executable Headers are equal" << std::endl;
     } else {
         std::cout << "Executable Headers are NOT equal" << std::endl;
     }
 
-    if (android::elf64::Elf64Comparator::compare(elf64Binary1.phdrs, elf64Binary2.phdrs)) {
+    if (android::elfutils::Elf64Comparator::compare(elf64Binary1.phdrs, elf64Binary2.phdrs)) {
         std::cout << "Program Headers are equal" << std::endl;
     } else {
         std::cout << "Program Headers are NOT equal" << std::endl;
     }
 
-    if (android::elf64::Elf64Comparator::compare(elf64Binary1.shdrs, elf64Binary2.shdrs)) {
+    if (android::elfutils::Elf64Comparator::compare(elf64Binary1.shdrs, elf64Binary2.shdrs)) {
         std::cout << "Section Headers are equal" << std::endl;
     } else {
         std::cout << "Section Headers are NOT equal" << std::endl;
     }
 
-    if (android::elf64::Elf64Comparator::compare(elf64Binary1.sections, elf64Binary2.sections)) {
+    if (android::elfutils::Elf64Comparator::compare(elf64Binary1.sections, elf64Binary2.sections)) {
         std::cout << "Sections are equal" << std::endl;
     } else {
         std::cout << "Sections are NOT equal" << std::endl;

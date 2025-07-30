@@ -20,18 +20,19 @@
 #include <string>
 #include <vector>
 
-#include <android-base/logging.h>
+#include <assert.h>
+
 #include <elf.h>
 
 namespace android {
-namespace elf64 {
+namespace elfutils {
 
 // Section content representation
 typedef struct {
-    std::vector<char> data;   // Raw content of the data section.
-    uint64_t size;   // Size of the data section.
-    std::string name;      // The name of the section.
-    uint16_t index;  // Index of the section.
+    std::vector<char> data;  // Raw content of the data section.
+    uint64_t size;           // Size of the data section.
+    std::string name;        // The name of the section.
+    uint16_t index;          // Index of the section.
 } Elf64_Sc;
 
 // Class to represent an ELF64 binary.
@@ -150,10 +151,10 @@ class Elf64Binary {
 
         char* st = sections.at(dynStrIdx).data.data();
 
-        CHECK_NE(nullptr, memchr(&st[offset], 0, sections.at(dynStrIdx).data.size() - offset));
+        assert(memchr(&st[offset], 0, sections.at(dynStrIdx).data.size() - offset));
         return &st[offset];
     }
 };
 
-}  // namespace elf64
+}  // namespace elfutils
 }  // namespace android
