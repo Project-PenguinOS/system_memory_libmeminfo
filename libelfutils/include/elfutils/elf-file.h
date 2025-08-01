@@ -17,6 +17,7 @@
 #pragma once
 
 #include <sys/types.h>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -77,6 +78,7 @@ class ElfFile {
     virtual bool is64Bit() const = 0;
     virtual const std::string& getPath() const = 0;
     virtual const std::vector<Elf_Sc>& getSections() const = 0;
+    virtual std::optional<int64_t> getMinLoadSegmentAlignment() = 0;
 };
 
 // Forward declare ElfParser so that we can friend it
@@ -101,6 +103,7 @@ class ElfFileImpl : public ElfFile {
     bool is64Bit() const override { return std::is_same<Ehdr_t, Elf64_Ehdr>::value; }
     const std::string& getPath() const override { return mPath; }
     const std::vector<Elf_Sc>& getSections() const override { return mSections; }
+    std::optional<int64_t> getMinLoadSegmentAlignment() override;
 
     // Const accessors for serialization and inspection
     const Ehdr_t& getEhdr() const { return mEhdr; }
