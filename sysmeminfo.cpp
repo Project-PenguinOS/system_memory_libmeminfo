@@ -337,8 +337,12 @@ bool ReadDmabufHeapPoolsSizeKb(uint64_t* size, const std::string& dma_heap_pool_
 bool ReadDmabufHeapTotalExportedKb(uint64_t* size, const std::string& dma_heap_root_path,
                                    const std::string& dmabuf_sysfs_stats_path) {
     static bool support_dmabuf_heaps = [dma_heap_root_path]() -> bool {
-        bool ret = (access(dma_heap_root_path.c_str(), R_OK) == 0);
-        if (!ret) LOG(ERROR) << "DMA-BUF heaps not supported, read ION heap total instead.";
+        int access_ret = access(dma_heap_root_path.c_str(), R_OK);
+        bool ret = (access_ret == 0);
+        if (!ret) {
+            LOG(ERROR) << "DMA-BUF heaps not supported, read ION heap total instead. access() "
+                       << "returned " << access_ret << ", errno: " << strerror(errno);
+        }
         return ret;
     }();
 
