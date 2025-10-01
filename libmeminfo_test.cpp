@@ -935,6 +935,7 @@ SReclaimable:      44432 kB
 SUnreclaim:        42032 kB
 KernelStack:        4880 kB
 PageTables:         2900 kB
+SecPageTables:        56 kB
 NFS_Unstable:          0 kB
 Bounce:                0 kB
 WritebackTmp:          0 kB
@@ -943,6 +944,7 @@ Committed_AS:      80296 kB
 VmallocTotal:   263061440 kB
 VmallocUsed:       65536 kB
 VmallocChunk:          0 kB
+Percpu:            18432 kB
 AnonHugePages:      6144 kB
 ShmemHugePages:        0 kB
 ShmemPmdMapped:        0 kB
@@ -986,6 +988,8 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mi.mem_cma_total_kb(), 131072);
     EXPECT_EQ(mi.mem_cma_free_kb(), 130380);
     EXPECT_EQ(mi.mem_swap_cached_kb(), 29252);
+    EXPECT_EQ(mi.mem_sec_page_tables_kb(), 56);
+    EXPECT_EQ(mi.mem_percpu_kb(), 18432);
 }
 
 TEST(SysMemInfo, TestEmptyFile) {
@@ -1038,6 +1042,8 @@ enum {
     MEMINFO_CMA_TOTAL,
     MEMINFO_CMA_FREE,
     MEMINFO_SWAP_CACHED,
+    MEMINFO_SEC_PAGE_TABLES,
+    MEMINFO_PERCPU,
     MEMINFO_COUNT
 };
 
@@ -1069,6 +1075,7 @@ SReclaimable:      44432 kB
 SUnreclaim:        42032 kB
 KernelStack:        4880 kB
 PageTables:         2900 kB
+SecPageTables:        56 kB
 NFS_Unstable:          0 kB
 Bounce:                0 kB
 WritebackTmp:          0 kB
@@ -1077,6 +1084,7 @@ Committed_AS:      80296 kB
 VmallocTotal:   263061440 kB
 VmallocUsed:       65536 kB
 VmallocChunk:          0 kB
+Percpu:            18432 kB
 AnonHugePages:      6144 kB
 ShmemHugePages:        0 kB
 ShmemPmdMapped:        0 kB
@@ -1128,6 +1136,8 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mem[MEMINFO_CMA_TOTAL], 131072);
     EXPECT_EQ(mem[MEMINFO_CMA_FREE], 130380);
     EXPECT_EQ(mem[MEMINFO_SWAP_CACHED], 29252);
+    EXPECT_EQ(mem[MEMINFO_SEC_PAGE_TABLES], 56);
+    EXPECT_EQ(mem[MEMINFO_PERCPU], 18432);
 }
 
 TEST(SysMemInfo, TestVmallocInfoNoMemory) {
