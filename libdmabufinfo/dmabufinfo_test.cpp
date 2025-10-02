@@ -278,17 +278,13 @@ class DmaBufProcessStatsTest : public ::testing::Test {
         ASSERT_TRUE(android::base::WriteStringToFile(fdinfo, fdinfo_file_path));
     }
 
-    void AddSysfsDmaBufStats(unsigned int inode, unsigned int size, unsigned int mmap_count) {
+    void AddSysfsDmaBufStats(unsigned int inode, unsigned int size) {
         auto buffer_path = dmabuf_sysfs_path / android::base::StringPrintf("%u", inode);
         ASSERT_TRUE(fs::create_directory(buffer_path));
 
         auto size_path = buffer_path / "size";
         ASSERT_TRUE(android::base::WriteStringToFile(android::base::StringPrintf("%u", size),
                                                      size_path));
-
-        auto mmap_count_path = buffer_path / "mmap_count";
-        ASSERT_TRUE(android::base::WriteStringToFile(
-                android::base::StringPrintf("%u", mmap_count), mmap_count_path));
 
         auto exporter_path = buffer_path / "exporter_name";
         ASSERT_TRUE(android::base::WriteStringToFile(exporter, exporter_path));
@@ -324,8 +320,8 @@ TEST_F(DmaBufProcessStatsTest, TestReadDmaBufInfo) {
     map_entries.emplace_back(CreateMapEntry(4, 1024, true));  // Dmabuf 2
     AddMapEntries(map_entries);
 
-    AddSysfsDmaBufStats(2, 2048, 4);  // Dmabuf 1
-    AddSysfsDmaBufStats(4, 1024, 1);  // Dmabuf 2
+    AddSysfsDmaBufStats(2, 2048);  // Dmabuf 1
+    AddSysfsDmaBufStats(4, 1024);  // Dmabuf 2
 
     std::vector<DmaBuffer> dmabufs;
     ASSERT_TRUE(ReadDmaBufInfo(pid, &dmabufs, true, procfs_path, dmabuf_sysfs_path));
@@ -401,8 +397,8 @@ TEST_F(DmaBufProcessStatsTest, TestReadDmaBufMapRefs) {
     map_entries.emplace_back(CreateMapEntry(3, 2048, true));  // Dmabuf 2
     AddMapEntries(map_entries);
 
-    AddSysfsDmaBufStats(2, 1024, 2);  // Dmabuf 1
-    AddSysfsDmaBufStats(3, 2048, 1);  // Dmabuf 2
+    AddSysfsDmaBufStats(2, 1024);  // Dmabuf 1
+    AddSysfsDmaBufStats(3, 2048);  // Dmabuf 2
 
     std::vector<DmaBuffer> dmabufs;
     ASSERT_TRUE(ReadDmaBufMapRefs(pid, &dmabufs, procfs_path, dmabuf_sysfs_path));
