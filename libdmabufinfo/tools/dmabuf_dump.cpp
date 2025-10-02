@@ -228,7 +228,7 @@ int main(int argc, char* argv[]) {
 
     int opt;
     bool show_table = false;
-    bool show_dmabuf_sysfs_stats = false;
+    bool show_per_buffer_stats = false;
     Format format = Format::RAW;
     while ((opt = getopt_long(argc, argv, "abho:", longopts, nullptr)) != -1) {
         switch (opt) {
@@ -236,7 +236,7 @@ int main(int argc, char* argv[]) {
                 show_table = true;
                 break;
             case 'b':
-                show_dmabuf_sysfs_stats = true;
+                show_per_buffer_stats = true;
                 break;
             case 'o':
                 format = android::meminfo::GetFormat(optarg);
@@ -265,8 +265,8 @@ int main(int argc, char* argv[]) {
 
     pid_t pid = -1;
     if (optind < argc) {
-        if (show_table || show_dmabuf_sysfs_stats) {
-            fprintf(stderr, "Invalid arguments: -a and -b does not need arguments\n");
+        if (show_table || show_per_buffer_stats) {
+            fprintf(stderr, "Invalid arguments: -a and -b do not need arguments\n");
             usage(EXIT_FAILURE);
         }
         if (optind != (argc - 1)) {
@@ -280,11 +280,11 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (show_dmabuf_sysfs_stats) {
+    if (show_per_buffer_stats) {
         DumpDmabufSysfsStats();
     }
 
-    if (!show_table && show_dmabuf_sysfs_stats) {
+    if (!show_table && show_per_buffer_stats) {
         return 0;
     }
 
@@ -303,12 +303,12 @@ int main(int argc, char* argv[]) {
 
     // Show the old dmabuf table, inode x process
     if (show_table) {
-        printf("%s", (show_dmabuf_sysfs_stats) ? "\n\n" : "");
+        printf("%s", (show_per_buffer_stats) ? "\n\n" : "");
         PrintDmaBufTable(bufs);
         return 0;
     }
 
-    if (!show_table && !show_dmabuf_sysfs_stats) {
+    if (!show_table && !show_per_buffer_stats) {
         PrintDmaBufPerProcess(bufs);
     }
 
