@@ -316,24 +316,24 @@ static bool ReadSysfsFile(const std::string& path, uint64_t* value) {
     return true;
 }
 
-bool ReadIonHeapsSizeKb(uint64_t* size, const std::string& path) {
-    return ReadSysfsFile(path, size);
+[[deprecated("Retained for binary compatibility for GRF")]]
+bool ReadIonHeapsSizeKb(uint64_t*, const std::string&) {
+    return false;
 }
 
-bool ReadIonPoolsSizeKb(uint64_t* size, const std::string& path) {
-    return ReadSysfsFile(path, size);
+[[deprecated("Retained for binary compatibility for GRF")]]
+bool ReadIonPoolsSizeKb(uint64_t*, const std::string&) {
+    return false;
 }
 
 bool ReadDmabufHeapPoolsSizeKb(uint64_t* size, const std::string& dma_heap_pool_size_path) {
     static bool support_dmabuf_heap_pool_size = [dma_heap_pool_size_path]() -> bool {
         bool ret = (access(dma_heap_pool_size_path.c_str(), R_OK) == 0);
-        if (!ret)
-            LOG(ERROR) << "Unable to read DMA-BUF heap total pool size, read ION total pool "
-                          "size instead.";
+        if (!ret) LOG(ERROR) << "Unable to read DMA-BUF heap total pool size";
         return ret;
     }();
 
-    if (!support_dmabuf_heap_pool_size) return ReadIonPoolsSizeKb(size);
+    if (!support_dmabuf_heap_pool_size) return false;
 
     return ReadSysfsFile(dma_heap_pool_size_path, size);
 }
@@ -375,13 +375,13 @@ bool ReadDmabufHeapTotalExportedKb(uint64_t* size) {
         int access_ret = access(DMABUF_HEAP_ROOT_PATH, R_OK);
         bool ret = (access_ret == 0);
         if (!ret) {
-            LOG(ERROR) << "DMA-BUF heaps not supported, read ION heap total instead. access() "
-                       << "returned " << access_ret << ", errno: " << strerror(errno);
+            LOG(ERROR) << "DMA-BUF heaps not supported. access() returned " << access_ret
+                       << ", errno: " << strerror(errno);
         }
         return ret;
     }();
 
-    if (!support_dmabuf_heaps) return ReadIonHeapsSizeKb(size);
+    if (!support_dmabuf_heaps) return false;
 
     std::unordered_set<ExporterName> heap_list = GetDmabufHeapNames(DMABUF_HEAP_ROOT_PATH);
     if (heap_list.empty()) return false;
