@@ -37,6 +37,8 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 
+#include "meminfo_private.h"
+
 using namespace std;
 using namespace android::meminfo;
 using android::vintf::KernelVersion;
@@ -1335,17 +1337,17 @@ class DmabufHeapStats : public ::testing::Test {
   public:
     virtual void SetUp() {
         fs::current_path(fs::temp_directory_path());
-        buffer_stats_path = fs::current_path() / "buffers";
-        ASSERT_TRUE(fs::create_directory(buffer_stats_path));
+        sysfs_buffer_stats_path = fs::current_path() / "buffers";
+        ASSERT_TRUE(fs::create_directory(sysfs_buffer_stats_path));
         heap_root_path = fs::current_path() / "dma_heap";
         ASSERT_TRUE(fs::create_directory(heap_root_path));
     }
     virtual void TearDown() {
-        fs::remove_all(buffer_stats_path);
+        fs::remove_all(sysfs_buffer_stats_path);
         fs::remove_all(heap_root_path);
     }
 
-    fs::path buffer_stats_path;
+    fs::path sysfs_buffer_stats_path;
     fs::path heap_root_path;
 };
 
@@ -1357,7 +1359,7 @@ TEST_F(DmabufHeapStats, TestDmabufHeapTotalExportedKb) {
     ASSERT_TRUE(android::base::WriteStringToFile("test", system_heap_path));
 
     for (unsigned int inode_number = 74831; inode_number < 74841; inode_number++) {
-        auto buffer_path = buffer_stats_path / StringPrintf("%u", inode_number);
+        auto buffer_path = sysfs_buffer_stats_path / StringPrintf("%u", inode_number);
         ASSERT_TRUE(fs::create_directories(buffer_path));
 
         auto buffer_size_path = buffer_path / "size";
@@ -1369,7 +1371,8 @@ TEST_F(DmabufHeapStats, TestDmabufHeapTotalExportedKb) {
         ASSERT_TRUE(android::base::WriteStringToFile(exp_name, exp_name_path));
     }
 
-    ASSERT_TRUE(ReadDmabufHeapTotalExportedKb(&size, heap_root_path, buffer_stats_path));
+    // This version of the API with path args is now test-only
+    ASSERT_TRUE(ReadDmabufHeapTotalExportedKb(&size, heap_root_path, sysfs_buffer_stats_path));
     ASSERT_EQ(size, 20);
 }
 

@@ -32,7 +32,7 @@
 #include <vector>
 
 #include <android-base/stringprintf.h>
-#include <dmabufinfo/dmabuf_sysfs_stats.h>
+#include <dmabufinfo/dmabuf_per_buffer_stats.h>
 #include <dmabufinfo/dmabufinfo.h>
 #include <meminfo/procmeminfo.h>
 
@@ -137,7 +137,8 @@ static void PrintDmaBufTable(const std::vector<DmaBuffer>& bufs) {
     printf("\n");
 }
 
-static void PrintDmaBufPerProcess(const std::vector<DmaBuffer>& bufs) {
+static void PrintDmaBufPerProcess(const std::vector<DmaBuffer>& bufs,
+                                  const android::dmabufinfo::DmabufPerBufferStats& stats) {
     if (bufs.empty()) {
         printf("dmabuf info not found ¯\\_(ツ)_/¯\n");
         return;
@@ -178,28 +179,17 @@ static void PrintDmaBufPerProcess(const std::vector<DmaBuffer>& bufs) {
         total_pss += pss;
     }
 
-    uint64_t kernel_rss = 0;  // Total size of dmabufs NOT mapped or opened by a process
-    if (android::dmabufinfo::GetDmabufTotalExportedKb(&kernel_rss)) {
-        kernel_rss *= 1024;  // KiB -> bytes
-        if (kernel_rss >= userspace_size)
-            kernel_rss -= userspace_size;
-        else
-            printf("Warning: Total dmabufs < userspace dmabufs\n");
-    } else {
-        printf("Warning: Could not get total exported dmabufs. Kernel size will be 0.\n");
-    }
+    // Total size of dmabufs NOT mapped or opened by a process
+    uint64_t kernel_rss = stats.total_size();
+    if (kernel_rss >= userspace_size)
+        kernel_rss -= userspace_size;
+    else
+        printf("Warning: Total dmabufs < userspace dmabufs\n");
 
     outputHelper->TotalProcessesStats(total_rss, total_pss, userspace_size, kernel_rss);
 }
 
-static void DumpDmabufSysfsStats() {
-    android::dmabufinfo::DmabufSysfsStats stats;
-
-    if (!android::dmabufinfo::GetDmabufSysfsStats(&stats)) {
-        printf("Unable to read DMA-BUF sysfs stats from device\n");
-        return;
-    }
-
+static void DumpDmabufPerBufferStats(const android::dmabufinfo::DmabufPerBufferStats& stats) {
     auto buffer_stats = stats.buffer_stats();
     auto exporter_stats = stats.exporter_info();
 
@@ -217,7 +207,7 @@ static void DumpDmabufSysfsStats() {
     }
 
     printf("\n\n%s DMA-BUF total stats %s\n", separator, separator);
-    outputHelper->SysfsBufTotalStats(stats);
+    outputHelper->PerBufTotalStats(stats);
 }
 
 int main(int argc, char* argv[]) {
@@ -280,9 +270,12 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (show_per_buffer_stats) {
-        DumpDmabufSysfsStats();
+    android::dmabufinfo::DmabufPerBufferStats stats;
+    if (!GetDmabufPerBufferStats(stats)) {
+        printf("Unable to read DMA-BUF per-buffer stats from device\n");
     }
+
+    if (show_per_buffer_stats) DumpDmabufPerBufferStats(stats);
 
     if (!show_table && show_per_buffer_stats) {
         return 0;
@@ -290,12 +283,12 @@ int main(int argc, char* argv[]) {
 
     std::vector<DmaBuffer> bufs;
     if (pid != -1) {
-        if (!ReadDmaBufInfo(pid, &bufs)) {
+        if (!ReadDmaBufInfo(pid, bufs, stats)) {
             fprintf(stderr, "Unable to read dmabuf info for %d\n", pid);
             exit(EXIT_FAILURE);
         }
     } else {
-        if (!ReadProcfsDmaBufs(&bufs)) {
+        if (!ReadProcfsDmaBufs(bufs, stats)) {
             fprintf(stderr, "Failed to ReadProcfsDmaBufs, check logcat for info\n");
             exit(EXIT_FAILURE);
         }
@@ -309,7 +302,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (!show_table && !show_per_buffer_stats) {
-        PrintDmaBufPerProcess(bufs);
+        PrintDmaBufPerProcess(bufs, stats);
     }
 
     return 0;

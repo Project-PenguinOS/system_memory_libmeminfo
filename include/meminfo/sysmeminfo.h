@@ -29,8 +29,6 @@
 namespace android {
 namespace meminfo {
 
-static constexpr const char kDmabufHeapRoot[] = "/dev/dma_heap";
-
 class SysMemInfo final {
     // System or Global memory accounting
   public:
@@ -171,9 +169,7 @@ bool ReadProcessGpuUsageKb(uint32_t pid, uint32_t gpu_id, uint64_t* size);
 bool ReadGpuTotalUsageKb(uint64_t* size);
 
 // Read total size of DMA-BUFs exported from the DMA-BUF heap framework in kb
-bool ReadDmabufHeapTotalExportedKb(
-        uint64_t* size, const std::string& dma_heap_root = kDmabufHeapRoot,
-        const std::string& dma_buf_sysfs_path = "/sys/kernel/dmabuf/buffers");
+bool ReadDmabufHeapTotalExportedKb(uint64_t* size);
 
 // Read total amount of memory in kb allocated by kernel drivers through CMA.
 bool ReadKernelCmaUsageKb(uint64_t* size,
