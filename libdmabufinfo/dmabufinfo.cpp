@@ -339,5 +339,19 @@ bool ReadProcfsDmaBufs(std::vector<DmaBuffer>* bufs) {
     return ReadProcfsDmaBufs(*bufs, stats);
 }
 
+bool GetDmabufUserspaceKb(uint64_t& userspace_size) {
+    dmabufinfo::DmabufPerBufferStats stats;
+    if (!dmabufinfo::GetDmabufPerBufferStats(stats)) return false;
+
+    std::vector<DmaBuffer> bufs;
+    if (!ReadProcfsDmaBufs(bufs, stats)) return false;
+
+    for (const auto& buf : bufs) userspace_size += buf.size();
+
+    userspace_size /= 1024;
+
+    return true;
+}
+
 }  // namespace dmabufinfo
 }  // namespace android
