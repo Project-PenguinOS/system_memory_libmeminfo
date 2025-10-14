@@ -54,6 +54,7 @@ enum {
     HEAP_GRAPHICS,
     HEAP_GL,
     HEAP_OTHER_MEMTRACK,
+    HEAP_MEMFD,
 
     // Dalvik extra sections (heap).
     HEAP_DALVIK_NORMAL,
@@ -79,7 +80,7 @@ enum {
     HEAP_ART_BOOT,
 
     _NUM_HEAP,
-    _NUM_EXCLUSIVE_HEAP = HEAP_OTHER_MEMTRACK + 1,
+    _NUM_EXCLUSIVE_HEAP = HEAP_MEMFD + 1,
     _NUM_CORE_HEAP = HEAP_NATIVE + 1
 
 };
