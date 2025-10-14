@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 #include <mntent.h>
 
+#include <iomanip>
 #include <regex>
 #include <set>
 
@@ -111,7 +112,14 @@ class ElfAlignmentTest : public ::testing::TestWithParam<std::string> {
 
         if (auto minAlign = elfFile.getMinLoadSegmentAlignment()) {
             EXPECT_GE(*minAlign, kRequiredMaxSupportedPageSize)
-                    << " " << path << " is not at least 16KiB aligned";
+                    << " " << path << " has alignment 0x" << std::hex << *minAlign
+                    << " which is not at least 0x" << kRequiredMaxSupportedPageSize;
+        }
+
+        if (auto relroEnd = elfFile.getRelroEndAddress()) {
+            EXPECT_EQ(*relroEnd % kRequiredMaxSupportedPageSize, 0u)
+                    << " " << path << " has RELRO end address 0x" << std::hex << *relroEnd
+                    << " which is not at least 0x" << kRequiredMaxSupportedPageSize << " aligned.";
         }
     };
 
