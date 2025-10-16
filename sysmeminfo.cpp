@@ -44,12 +44,16 @@
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
-#include <dmabufinfo/dmabuf_sysfs_stats.h>
+#include <dmabufinfo/dmabuf_per_buffer_stats.h>
 
 #include "meminfo_private.h"
+#include "libdmabufinfo/dmabuf_sysfs_stats.h"
 
 namespace android {
 namespace meminfo {
+
+using DmabufTotal = dmabufinfo::DmabufTotal;
+using ExporterName = dmabufinfo::DmabufPerBufferStats::ExporterName;
 
 bool SysMemInfo::ReadMemInfo(const char* path) {
     return ReadMemInfo(path, SysMemInfo::kDefaultSysMemInfoTags.size(),
@@ -334,10 +338,41 @@ bool ReadDmabufHeapPoolsSizeKb(uint64_t* size, const std::string& dma_heap_pool_
     return ReadSysfsFile(dma_heap_pool_size_path, size);
 }
 
-bool ReadDmabufHeapTotalExportedKb(uint64_t* size, const std::string& dma_heap_root_path,
-                                   const std::string& dmabuf_sysfs_stats_path) {
-    static bool support_dmabuf_heaps = [dma_heap_root_path]() -> bool {
-        int access_ret = access(dma_heap_root_path.c_str(), R_OK);
+static std::unordered_set<ExporterName> GetDmabufHeapNames(const std::string& dma_heap_root_path) {
+    std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(dma_heap_root_path.c_str()), closedir);
+
+    if (!dir) {
+        return {};
+    }
+
+    std::unordered_set<ExporterName> heap_list;
+    struct dirent* dent;
+    while ((dent = readdir(dir.get()))) {
+        if (!strcmp(dent->d_name, ".") || !strcmp(dent->d_name, "..")) continue;
+
+        heap_list.insert(dent->d_name);
+    }
+
+    return heap_list;
+}
+
+static uint64_t AccumulateHeapTotals(const std::unordered_set<ExporterName>& heap_list,
+        const std::unordered_map<ExporterName, DmabufTotal>& exporter_info) {
+    uint64_t size = 0;
+    for (const auto& heap : heap_list) {
+        auto iter = exporter_info.find(heap);
+        if (iter != exporter_info.end()) size += iter->second.size;
+    }
+
+    size /= 1024; // KiB
+
+    return size;
+}
+
+bool ReadDmabufHeapTotalExportedKb(uint64_t* size) {
+    constexpr const char DMABUF_HEAP_ROOT_PATH[] = "/dev/dma_heap";
+    static bool support_dmabuf_heaps = [DMABUF_HEAP_ROOT_PATH]() -> bool {
+        int access_ret = access(DMABUF_HEAP_ROOT_PATH, R_OK);
         bool ret = (access_ret == 0);
         if (!ret) {
             LOG(ERROR) << "DMA-BUF heaps not supported, read ION heap total instead. access() "
@@ -348,34 +383,29 @@ bool ReadDmabufHeapTotalExportedKb(uint64_t* size, const std::string& dma_heap_r
 
     if (!support_dmabuf_heaps) return ReadIonHeapsSizeKb(size);
 
-    std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(dma_heap_root_path.c_str()), closedir);
-
-    if (!dir) {
-        return false;
-    }
-
-    std::unordered_set<std::string> heap_list;
-    struct dirent* dent;
-    while ((dent = readdir(dir.get()))) {
-        if (!strcmp(dent->d_name, ".") || !strcmp(dent->d_name, "..")) continue;
-
-        heap_list.insert(dent->d_name);
-    }
-
+    std::unordered_set<ExporterName> heap_list = GetDmabufHeapNames(DMABUF_HEAP_ROOT_PATH);
     if (heap_list.empty()) return false;
 
-    android::dmabufinfo::DmabufSysfsStats stats;
-    if (!android::dmabufinfo::GetDmabufSysfsStats(&stats, dmabuf_sysfs_stats_path)) return false;
+    android::dmabufinfo::DmabufPerBufferStats stats;
+    if (!android::dmabufinfo::GetDmabufPerBufferStats(stats)) return false;
 
-    auto exporter_info = stats.exporter_info();
+    *size = AccumulateHeapTotals(heap_list, stats.exporter_info());
 
-    *size = 0;
-    for (const auto& heap : heap_list) {
-        auto iter = exporter_info.find(heap);
-        if (iter != exporter_info.end()) *size += iter->second.size;
-    }
+    return true;
+}
 
-    *size = *size / 1024;
+[[deprecated("Retained for binary compatibility for GRF and for libmeminfo_test")]]
+bool ReadDmabufHeapTotalExportedKb(
+        uint64_t* size, const std::string& dma_heap_root_path,
+        const std::string& dmabuf_sysfs_stats_path) {
+
+    std::unordered_set<ExporterName> heap_list = GetDmabufHeapNames(dma_heap_root_path);
+    if (heap_list.empty()) return false;
+
+    android::dmabufinfo::DmabufPerBufferStats stats;
+    if (!android::dmabufinfo::GetDmabufSysfsStats(stats, dmabuf_sysfs_stats_path)) return false;
+
+    *size = AccumulateHeapTotals(heap_list, stats.exporter_info());
 
     return true;
 }
