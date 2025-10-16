@@ -117,8 +117,7 @@ bool ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>::setDynamicEntries(
  * Returns the minimum of all PT_LOAD segments' p_align.
  */
 template <typename Ehdr_t, typename Phdr_t, typename Shdr_t, typename Dyn_t>
-std::optional<int64_t> ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>::getMinLoadSegmentAlignment()
-        const {
+std::optional<int64_t> ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>::getMinLoadSegmentAlignment() {
     std::optional<int64_t> minAlign;
 
     for (const auto& phdr : mPhdrs) {
@@ -133,16 +132,6 @@ std::optional<int64_t> ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>::getMinLoadSeg
     }
 
     return minAlign;
-}
-
-template <typename Ehdr_t, typename Phdr_t, typename Shdr_t, typename Dyn_t>
-std::optional<uint64_t> ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>::getRelroEndAddress() const {
-    for (const auto& phdr : mPhdrs) {
-        if (phdr.p_type == PT_GNU_RELRO) {
-            return phdr.p_vaddr + phdr.p_memsz;
-        }
-    }
-    return std::nullopt;
 }
 
 // Explicitly instantiate the templates for 32-bit and 64-bit ELF files.
