@@ -110,12 +110,17 @@ bool ExtractAndroidHeapStatsFromFile(const std::string& smaps_path, AndroidHeapS
             } else if (name.starts_with("/dev/ashmem")) {
                 which_heap = HEAP_ASHMEM;
             }
-        } else if (name.starts_with("/memfd:jit-cache")) {
-            which_heap = HEAP_DALVIK_OTHER;
-            sub_heap = HEAP_DALVIK_OTHER_APP_CODE_CACHE;
-        } else if (name.starts_with("/memfd:jit-zygote-cache")) {
-            which_heap = HEAP_DALVIK_OTHER;
-            sub_heap = HEAP_DALVIK_OTHER_ZYGOTE_CODE_CACHE;
+        } else if (name.starts_with("/memfd:")) {
+            which_heap = HEAP_MEMFD;
+            if (name.starts_with("/memfd:jit-cache")) {
+              which_heap = HEAP_DALVIK_OTHER;
+              sub_heap = HEAP_DALVIK_OTHER_APP_CODE_CACHE;
+            } else if (name.starts_with("/memfd:jit-zygote-cache")) {
+              which_heap = HEAP_DALVIK_OTHER;
+              sub_heap = HEAP_DALVIK_OTHER_ZYGOTE_CODE_CACHE;
+            } else if (name.starts_with("/memfd:CursorWindow")) {
+                which_heap = HEAP_CURSOR;
+            }
         } else if (name.starts_with("[anon:")) {
             which_heap = HEAP_UNKNOWN;
             if (name.starts_with("[anon:dalvik-")) {
