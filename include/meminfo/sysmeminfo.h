@@ -29,8 +29,6 @@
 namespace android {
 namespace meminfo {
 
-static constexpr const char kDmabufHeapRoot[] = "/dev/dma_heap";
-
 class SysMemInfo final {
     // System or Global memory accounting
   public:
@@ -149,14 +147,6 @@ std::optional<uint64_t> ParseSizeToBytes(const std::string& str);
 // _always_ mapped in a process and are counted for in each process.
 uint64_t ReadVmallocInfo(const char* path = "/proc/vmallocinfo");
 
-// Read ION heaps allocation size in kb
-bool ReadIonHeapsSizeKb(
-    uint64_t* size, const std::string& path = "/sys/kernel/ion/total_heaps_kb");
-
-// Read ION pools allocation size in kb
-bool ReadIonPoolsSizeKb(
-    uint64_t* size, const std::string& path = "/sys/kernel/ion/total_pools_kb");
-
 // Read DMA-BUF heap pools allocation size in kb
 bool ReadDmabufHeapPoolsSizeKb(uint64_t* size,
                             const std::string& path = "/sys/kernel/dma_heap/total_pools_kb");
@@ -171,9 +161,7 @@ bool ReadProcessGpuUsageKb(uint32_t pid, uint32_t gpu_id, uint64_t* size);
 bool ReadGpuTotalUsageKb(uint64_t* size);
 
 // Read total size of DMA-BUFs exported from the DMA-BUF heap framework in kb
-bool ReadDmabufHeapTotalExportedKb(
-        uint64_t* size, const std::string& dma_heap_root = kDmabufHeapRoot,
-        const std::string& dma_buf_sysfs_path = "/sys/kernel/dmabuf/buffers");
+bool ReadDmabufHeapTotalExportedKb(uint64_t* size);
 
 // Read total amount of memory in kb allocated by kernel drivers through CMA.
 bool ReadKernelCmaUsageKb(uint64_t* size,
