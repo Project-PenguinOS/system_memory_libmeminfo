@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 #include <mntent.h>
 
+#include <iomanip>
 #include <regex>
 #include <set>
 
@@ -28,10 +29,12 @@
 #include <android-base/strings.h>
 #include <android/api-level.h>
 
+using ::android::elfutils::Elf64_File;
+
 constexpr char kLowRamProp[] = "ro.config.low_ram";
 constexpr char kVendorApiLevelProp[] = "ro.vendor.api_level";
 // 16KB by default (unsupported devices must explicitly opt-out)
-constexpr size_t kRequiredMaxSupportedPageSize = 0x4000;
+constexpr uint64_t kRequiredMaxSupportedPageSize = 0x4000;
 
 static inline std::string escapeForRegex(const std::string& str) {
     // Regex metacharacters to be escaped
@@ -76,6 +79,96 @@ using ::android::elfutils::ElfFile;
 
 class ElfAlignmentTest : public ::testing::TestWithParam<std::string> {
   protected:
+    static void validateRelroSegment(ElfFile& elfFile) {
+        // We can safely use static_cast because the caller (loadAlignmentCb)
+        // has already verified that this is a 64-bit ELF file.
+        const auto* elf64File = static_cast<const Elf64_File*>(&elfFile);
+
+        const auto& phdrs = elf64File->getPhdrs();
+        const auto& shdrs = elf64File->getShdrs();
+        const std::string& path = elfFile.getPath();
+
+        const Elf64_Phdr* relroPhdr = nullptr;
+        for (const auto& phdr : phdrs) {
+            if (phdr.p_type == PT_GNU_RELRO) {
+                relroPhdr = &phdr;
+                break;
+            }
+        }
+
+        // No RELRO segment, nothing to validate.
+        if (!relroPhdr) {
+            return;
+        }
+
+        ASSERT_GT(relroPhdr->p_memsz, 0) << "RELRO segment's mem size cannot be zero in " << path;
+
+        const Elf64_Phdr* loadPhdr = nullptr;
+        for (const auto& phdr : phdrs) {
+            if (phdr.p_type == PT_LOAD && phdr.p_vaddr == relroPhdr->p_vaddr) {
+                loadPhdr = &phdr;
+                break;
+            }
+        }
+
+        ASSERT_TRUE(loadPhdr) << "RELRO segment does not have a corresponding LOAD segment in "
+                              << path;
+        ASSERT_GT(loadPhdr->p_memsz, 0)
+                << "RELRO segment's corresponding LOAD segment mem size cannot be zero in " << path;
+
+        auto getContainedSections = [&](const Elf64_Phdr* segment) {
+            std::vector<Elf64_Shdr> contained;
+            for (const auto& shdr : shdrs) {
+                if (shdr.sh_addr >= segment->p_vaddr &&
+                    (shdr.sh_addr + shdr.sh_size) <= (segment->p_vaddr + segment->p_memsz)) {
+                    contained.push_back(shdr);
+                }
+            }
+            return contained;
+        };
+
+        auto relroSections = getContainedSections(relroPhdr);
+        auto loadSections = getContainedSections(loadPhdr);
+
+        auto shdrSorter = [](const Elf64_Shdr& a, const Elf64_Shdr& b) {
+            return a.sh_addr < b.sh_addr;
+        };
+        std::sort(relroSections.begin(), relroSections.end(), shdrSorter);
+        std::sort(loadSections.begin(), loadSections.end(), shdrSorter);
+
+        bool sameSections = relroSections.size() == loadSections.size();
+        if (sameSections) {
+            for (size_t i = 0; i < relroSections.size(); ++i) {
+                const auto& relroShdr = relroSections[i];
+                const auto& loadShdr = loadSections[i];
+                if (memcmp(&relroShdr, &loadShdr, sizeof(Elf64_Shdr)) != 0) {
+                    sameSections = false;
+                    break;
+                }
+            }
+        }
+
+        // If sections are the same, RELRO is the entire LOAD segment and alignment is guaranteed.
+        if (sameSections) {
+            return;
+        }
+
+        auto relroStart = relroPhdr->p_vaddr;
+        auto loadStart = loadPhdr->p_vaddr;
+        if (relroStart % kRequiredMaxSupportedPageSize) {
+            EXPECT_EQ(relroStart, loadStart)
+                    << "Unaligned RELRO start 0x" << std::hex << relroStart
+                    << " must match LOAD start 0x" << loadStart << " in " << path;
+        }
+
+        auto relroEnd = relroStart + relroPhdr->p_memsz;
+        auto loadEnd = loadStart + loadPhdr->p_memsz;
+        if (relroEnd % kRequiredMaxSupportedPageSize) {
+            EXPECT_EQ(relroEnd, loadEnd) << "Unaligned RELRO end 0x" << std::hex << relroEnd
+                                         << " must match LOAD end 0x" << loadEnd << " in " << path;
+        }
+    }
+
     static void loadAlignmentCb(ElfFile& elfFile) {
         using namespace android::elfutils;
 
@@ -111,8 +204,11 @@ class ElfAlignmentTest : public ::testing::TestWithParam<std::string> {
 
         if (auto minAlign = elfFile.getMinLoadSegmentAlignment()) {
             EXPECT_GE(*minAlign, kRequiredMaxSupportedPageSize)
-                    << " " << path << " is not at least 16KiB aligned";
+                    << " " << path << " has alignment 0x" << std::hex << *minAlign
+                    << " which is not at least 0x" << kRequiredMaxSupportedPageSize;
         }
+
+        validateRelroSegment(elfFile);
     };
 
     static bool isLowRamDevice() { return android::base::GetBoolProperty(kLowRamProp, false); }
