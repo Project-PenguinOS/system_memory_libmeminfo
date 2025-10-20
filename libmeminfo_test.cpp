@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,8 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+
+#include "meminfo_private.h"
 
 using namespace std;
 using namespace android::meminfo;
@@ -934,6 +937,7 @@ SReclaimable:      44432 kB
 SUnreclaim:        42032 kB
 KernelStack:        4880 kB
 PageTables:         2900 kB
+SecPageTables:        56 kB
 NFS_Unstable:          0 kB
 Bounce:                0 kB
 WritebackTmp:          0 kB
@@ -942,6 +946,7 @@ Committed_AS:      80296 kB
 VmallocTotal:   263061440 kB
 VmallocUsed:       65536 kB
 VmallocChunk:          0 kB
+Percpu:            18432 kB
 AnonHugePages:      6144 kB
 ShmemHugePages:        0 kB
 ShmemPmdMapped:        0 kB
@@ -985,6 +990,8 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mi.mem_cma_total_kb(), 131072);
     EXPECT_EQ(mi.mem_cma_free_kb(), 130380);
     EXPECT_EQ(mi.mem_swap_cached_kb(), 29252);
+    EXPECT_EQ(mi.mem_sec_page_tables_kb(), 56);
+    EXPECT_EQ(mi.mem_percpu_kb(), 18432);
 }
 
 TEST(SysMemInfo, TestEmptyFile) {
@@ -1037,6 +1044,8 @@ enum {
     MEMINFO_CMA_TOTAL,
     MEMINFO_CMA_FREE,
     MEMINFO_SWAP_CACHED,
+    MEMINFO_SEC_PAGE_TABLES,
+    MEMINFO_PERCPU,
     MEMINFO_COUNT
 };
 
@@ -1068,6 +1077,7 @@ SReclaimable:      44432 kB
 SUnreclaim:        42032 kB
 KernelStack:        4880 kB
 PageTables:         2900 kB
+SecPageTables:        56 kB
 NFS_Unstable:          0 kB
 Bounce:                0 kB
 WritebackTmp:          0 kB
@@ -1076,6 +1086,7 @@ Committed_AS:      80296 kB
 VmallocTotal:   263061440 kB
 VmallocUsed:       65536 kB
 VmallocChunk:          0 kB
+Percpu:            18432 kB
 AnonHugePages:      6144 kB
 ShmemHugePages:        0 kB
 ShmemPmdMapped:        0 kB
@@ -1127,6 +1138,8 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mem[MEMINFO_CMA_TOTAL], 131072);
     EXPECT_EQ(mem[MEMINFO_CMA_FREE], 130380);
     EXPECT_EQ(mem[MEMINFO_SWAP_CACHED], 29252);
+    EXPECT_EQ(mem[MEMINFO_SEC_PAGE_TABLES], 56);
+    EXPECT_EQ(mem[MEMINFO_PERCPU], 18432);
 }
 
 TEST(SysMemInfo, TestVmallocInfoNoMemory) {
@@ -1183,32 +1196,6 @@ TEST(SysMemInfo, TestVmallocInfoAll) {
     std::string file = std::string(tf.path);
 
     EXPECT_EQ(ReadVmallocInfo(file.c_str()), 7 * getpagesize());
-}
-
-TEST(SysMemInfo, TestReadIonHeapsSizeKb) {
-    std::string total_heaps_kb = R"total_heaps_kb(98480)total_heaps_kb";
-    uint64_t size;
-
-    TemporaryFile tf;
-    ASSERT_TRUE(tf.fd != -1);
-    ASSERT_TRUE(::android::base::WriteStringToFd(total_heaps_kb, tf.fd));
-    std::string file = std::string(tf.path);
-
-    ASSERT_TRUE(ReadIonHeapsSizeKb(&size, file));
-    EXPECT_EQ(size, 98480);
-}
-
-TEST(SysMemInfo, TestReadIonPoolsSizeKb) {
-    std::string total_pools_kb = R"total_pools_kb(416)total_pools_kb";
-    uint64_t size;
-
-    TemporaryFile tf;
-    ASSERT_TRUE(tf.fd != -1);
-    ASSERT_TRUE(::android::base::WriteStringToFd(total_pools_kb, tf.fd));
-    std::string file = std::string(tf.path);
-
-    ASSERT_TRUE(ReadIonPoolsSizeKb(&size, file));
-    EXPECT_EQ(size, 416);
 }
 
 TEST(SysMemInfo, TestReadGpuTotalUsageKb) {
@@ -1324,17 +1311,17 @@ class DmabufHeapStats : public ::testing::Test {
   public:
     virtual void SetUp() {
         fs::current_path(fs::temp_directory_path());
-        buffer_stats_path = fs::current_path() / "buffers";
-        ASSERT_TRUE(fs::create_directory(buffer_stats_path));
+        sysfs_buffer_stats_path = fs::current_path() / "buffers";
+        ASSERT_TRUE(fs::create_directory(sysfs_buffer_stats_path));
         heap_root_path = fs::current_path() / "dma_heap";
         ASSERT_TRUE(fs::create_directory(heap_root_path));
     }
     virtual void TearDown() {
-        fs::remove_all(buffer_stats_path);
+        fs::remove_all(sysfs_buffer_stats_path);
         fs::remove_all(heap_root_path);
     }
 
-    fs::path buffer_stats_path;
+    fs::path sysfs_buffer_stats_path;
     fs::path heap_root_path;
 };
 
@@ -1346,7 +1333,7 @@ TEST_F(DmabufHeapStats, TestDmabufHeapTotalExportedKb) {
     ASSERT_TRUE(android::base::WriteStringToFile("test", system_heap_path));
 
     for (unsigned int inode_number = 74831; inode_number < 74841; inode_number++) {
-        auto buffer_path = buffer_stats_path / StringPrintf("%u", inode_number);
+        auto buffer_path = sysfs_buffer_stats_path / StringPrintf("%u", inode_number);
         ASSERT_TRUE(fs::create_directories(buffer_path));
 
         auto buffer_size_path = buffer_path / "size";
@@ -1358,7 +1345,8 @@ TEST_F(DmabufHeapStats, TestDmabufHeapTotalExportedKb) {
         ASSERT_TRUE(android::base::WriteStringToFile(exp_name, exp_name_path));
     }
 
-    ASSERT_TRUE(ReadDmabufHeapTotalExportedKb(&size, heap_root_path, buffer_stats_path));
+    // This version of the API with path args is now test-only
+    ASSERT_TRUE(ReadDmabufHeapTotalExportedKb(&size, heap_root_path, sysfs_buffer_stats_path));
     ASSERT_EQ(size, 20);
 }
 
@@ -1373,6 +1361,65 @@ TEST(SysMemInfo, TestReadDmaBufHeapPoolsSizeKb) {
 
     ASSERT_TRUE(ReadDmabufHeapPoolsSizeKb(&size, file));
     EXPECT_EQ(size, 416);
+}
+
+TEST(ProcMemInfo, ParseSizeToBytes_Valid) {
+    EXPECT_EQ(std::optional<uint64_t>(0), ParseSizeToBytes("0MB"));
+    EXPECT_EQ(std::optional<uint64_t>(1024), ParseSizeToBytes("1024B"));
+    EXPECT_EQ(std::optional<uint64_t>(0), ParseSizeToBytes("0GiB"));
+    EXPECT_EQ(std::optional<uint64_t>(1000), ParseSizeToBytes("1K"));
+    EXPECT_EQ(std::optional<uint64_t>(1000), ParseSizeToBytes("1KB"));
+    EXPECT_EQ(std::optional<uint64_t>(1024), ParseSizeToBytes("1KiB"));
+    EXPECT_EQ(std::optional<uint64_t>(10 * 1000), ParseSizeToBytes("10KB"));
+    EXPECT_EQ(std::optional<uint64_t>(10 * 1024), ParseSizeToBytes("10KiB"));
+    EXPECT_EQ(std::optional<uint64_t>(100 * 1000), ParseSizeToBytes("100KB"));
+    EXPECT_EQ(std::optional<uint64_t>(100 * 1024), ParseSizeToBytes("100KiB"));
+    EXPECT_EQ(std::optional<uint64_t>(1000 * 1000), ParseSizeToBytes("1000KB"));
+    EXPECT_EQ(std::optional<uint64_t>(1000 * 1024), ParseSizeToBytes("1000KiB"));
+    EXPECT_EQ(std::optional<uint64_t>(70 * 1000 * 1000), ParseSizeToBytes("70M"));
+    EXPECT_EQ(std::optional<uint64_t>(70 * 1000 * 1000), ParseSizeToBytes("70MB"));
+    EXPECT_EQ(std::optional<uint64_t>(70 * 1024 * 1024), ParseSizeToBytes("70MiB"));
+    EXPECT_EQ(std::optional<uint64_t>(700000 * 1000), ParseSizeToBytes("700000KB"));
+    EXPECT_EQ(std::optional<uint64_t>(700000 * 1024), ParseSizeToBytes("700000KiB"));
+    EXPECT_EQ(std::optional<uint64_t>(200 * 1000 * 1000), ParseSizeToBytes("200MB"));
+    EXPECT_EQ(std::optional<uint64_t>(200 * 1024 * 1024), ParseSizeToBytes("200MiB"));
+    EXPECT_EQ(std::optional<uint64_t>(1000 * 1000 * 1000), ParseSizeToBytes("1000MB"));
+    EXPECT_EQ(std::optional<uint64_t>(1000 * 1024 * 1024), ParseSizeToBytes("1000MiB"));
+    EXPECT_EQ(std::optional<uint64_t>(600ULL * 1024 * 1024 * 1024), ParseSizeToBytes("600GiB"));
+    EXPECT_EQ(std::optional<uint64_t>(999ULL * 1000 * 1000 * 1000), ParseSizeToBytes("999GB"));
+    EXPECT_EQ(std::optional<uint64_t>(999ULL * 1000 * 1000 * 1000), ParseSizeToBytes("999 gB"));
+    EXPECT_EQ(std::optional<uint64_t>(999ULL * 1000 * 1000 * 1000), ParseSizeToBytes("999 gb"));
+    EXPECT_EQ(std::optional<uint64_t>(9999ULL * 1000 * 1000 * 1000), ParseSizeToBytes("9999GB"));
+    EXPECT_EQ(std::optional<uint64_t>(9000ULL * 1000 * 1000 * 1000),
+              ParseSizeToBytes(" 9000 GB   "));
+    EXPECT_EQ(std::optional<uint64_t>(1234ULL * 1000 * 1000 * 1000),
+              ParseSizeToBytes(" 1234 GB  "));
+    EXPECT_EQ(std::optional<uint64_t>(1234567890ULL * 1000), ParseSizeToBytes(" 1234567890 KB  "));
+    EXPECT_EQ(std::optional<uint64_t>(1234567890ULL * 1024), ParseSizeToBytes(" 1234567890 KiB  "));
+    EXPECT_EQ(std::optional<uint64_t>(123), ParseSizeToBytes("123B"));
+}
+
+TEST(ProcMemInfo, ParseSizeToBytes_Invalid) {
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("null"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes(""));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("     "));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("KB"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("123 dd"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("Invalid"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes(" ABC890 KB  "));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("-=+90 KB  "));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("--123"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("-KB"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("++123"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("+"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("+ 1 +"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("+--+ 1 +"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("1GB+"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes(" -1 b "));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes(" -0 gib "));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("+200MB"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("200"));
+    EXPECT_EQ(std::nullopt, ParseSizeToBytes("0200MB"));
 }
 
 int main(int argc, char** argv) {
