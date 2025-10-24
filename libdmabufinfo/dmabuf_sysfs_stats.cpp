@@ -188,7 +188,7 @@ bool GetDmabufTotalExportedKb(uint64_t* total_exported,
     DmabufPerBufferStats stats;
     if (!GetDmabufPerBufferStats(stats)) return false;
 
-    *total_exported = stats.total_size();
+    *total_exported = stats.total_size() / 1024;
 
     return true;
 }
