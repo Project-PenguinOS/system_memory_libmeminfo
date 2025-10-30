@@ -20,30 +20,26 @@ The tool performs a multi-pass scan on the provided files and directories:
         aligned and contained within a corresponding `PT_LOAD` segment. It also provides
         NDK version information on failure to help with debugging.
 
-## Building
-
-To build the `aac` tool from the root of the Android source tree, run:
-
-```bash
-m aac
-```
-
-The binary will be located at `out/host/linux-x86/bin/aac`.
-
 ## Usage
 
-You can run `aac` on one or more files or directories. The tool will recursively scan any
-directories provided.
+The recommended way to run the tool is via the `aac.py` wrapper script.
+This script automatically handles building the tool if it's not already
+built and then executes it, passing along any arguments.
+
+The script will recursively scan any directories provided.
 
 ```bash
-aac /path/to/your/app.apk
-aac /path/to/directory/of/apks
-aac /path/to/some/native_library.so
+# From the aac tool directory:
+./aac.py /path/to/your/app.apk
+./aac.py /path/to/directory/of/apks
+./aac.py /path/to/some/native_library.so
 ```
 
 ### Example Output
+```sh
+--- Found pre-built aac tool at /path/to/android/out/host/linux-x86/bin/aac ---
 
-```
+--- Running aac tool ---
 --- Discovering and extracting files ---
 
 --- Running Zipalign Checks ---
@@ -62,3 +58,11 @@ within any LOAD segment. Skipping check (likely obfuscated).
 Some checks failed.
 ```
 
+## Debugging
+
+A `--verbose` option provided for debugging build failures.
+
+# From the aac tool directory:
+```sh
+./aac.py --verbose /path/to/your/app.apk
+```
