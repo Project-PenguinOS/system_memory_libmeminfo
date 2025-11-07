@@ -121,5 +121,9 @@ bool ReadDmaBufMapRefs(pid_t pid, std::vector<DmaBuffer>& dmabufs,
 // Returns true on success, otherwise false.
 bool ReadProcfsDmaBufs(std::vector<DmaBuffer>& bufs, const DmabufPerBufferStats& per_buffer_stats);
 
+// Collects total DMA-BUF size referenced by all active processes.
+// Returns true on success.
+bool GetDmabufUserspaceKb(uint64_t& userspace_size);
+
 }  // namespace dmabufinfo
 }  // namespace android
