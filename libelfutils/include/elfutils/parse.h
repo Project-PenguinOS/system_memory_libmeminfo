@@ -20,6 +20,7 @@
 #include <elfutils/elf-file.h>
 
 #include <fstream>
+#include <optional>
 
 namespace android {
 namespace elfutils {
@@ -111,55 +112,73 @@ class ElfParser {
     }
 
     bool parseSections() {
-        Elf_Sc strTblPtr;
-
-        if (!mElfStream) {
-            return false;
-        }
-
+        // First, parse all section data so we can find the string table.
         for (size_t i = 0; i < mElfFile.mShdrs.size(); i++) {
-            uint64_t sOffset = mElfFile.mShdrs[i].sh_offset;
-            uint64_t sSize = mElfFile.mShdrs[i].sh_size;
-
             Elf_Sc section;
-            if (mElfFile.mShdrs[i].sh_type != SHT_NOBITS) {
-                section.data.resize(sSize);
-                mElfStream.seekg(sOffset);
-
-                mElfStream.read(section.data.data(), sSize);
-                if (!mElfStream) {
-                    return false;
-                }
+            if (!parseSectionData(i, section)) {
+                return false;
             }
-
-            section.size = sSize;
-            section.index = i;
-
-            if (mElfFile.mEhdr.e_shstrndx == i) {
-                strTblPtr = section;
-            }
-
             mElfFile.mSections.push_back(section);
         }
 
-        // Set the data section names.
-        // This has to be done after reading the data section with index e_shstrndx.
-        for (size_t i = 0; i < mElfFile.mSections.size(); i++) {
-            uint32_t nameIdx = mElfFile.mShdrs[i].sh_name;
-            char* st = strTblPtr.data.data();
-
-            if (nameIdx < strTblPtr.size) {
-                CHECK_NE(memchr(&st[nameIdx], 0, strTblPtr.size - nameIdx), nullptr);
-                mElfFile.mSections[i].name = &st[nameIdx];
-            }
+        // Find the string table section.
+        Elf_Sc* strTblPtr = nullptr;
+        if (mElfFile.mEhdr.e_shstrndx < mElfFile.mSections.size()) {
+            strTblPtr = &mElfFile.mSections[mElfFile.mEhdr.e_shstrndx];
         }
 
-        return !!mElfStream;
+        // Then, parse all section names.
+        for (auto& section : mElfFile.mSections) {
+            parseSectionName(section, *strTblPtr);
+        }
+
+        return true;
     }
 
   private:
     ElfFile_t& mElfFile;
     std::ifstream mElfStream;
+
+    bool parseSectionData(size_t index, Elf_Sc& section) {
+        if (!mElfStream) {
+            return false;
+        }
+
+        const auto& shdr = mElfFile.mShdrs[index];
+        uint64_t sOffset = shdr.sh_offset;
+        uint64_t sSize = shdr.sh_size;
+
+        if (shdr.sh_type != SHT_NOBITS) {
+            section.data.resize(sSize);
+            mElfStream.seekg(sOffset);
+
+            mElfStream.read(section.data.data(), sSize);
+            if (!mElfStream) {
+                return false;
+            }
+        }
+
+        section.size = sSize;
+        section.index = index;
+
+        return true;
+    }
+
+    void parseSectionName(Elf_Sc& section, const Elf_Sc& strTbl) {
+        section.name = "";  // Default name
+
+        if (strTbl.data.empty()) return;
+
+        const Elf_Shdr& shdr = mElfFile.mShdrs[section.index];
+        uint32_t nameIdx = shdr.sh_name;
+        const char* st = strTbl.data.data();
+
+        if (nameIdx >= strTbl.size) return;
+
+        if (memchr(&st[nameIdx], 0, strTbl.size - nameIdx) == nullptr) return;
+
+        section.name = &st[nameIdx];
+    }
 };
 
 }  // namespace elfutils
