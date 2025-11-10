@@ -21,6 +21,8 @@
 namespace android {
 namespace elfpolicy {
 
+constexpr size_t kMaxSupportedPageSize = 0x4000;
+
 // Checks if a 64-bit ELF file has its loadable segments aligned to at least
 // the specified page size.
 //
