@@ -44,10 +44,8 @@ class ElfParser {
     ~ElfParser() = default;
 
     [[nodiscard]] bool parse() {
-        return parseExecutableHeader(mElfFile.mEhdr) &&
-               parseProgramHeaders(mElfFile.mEhdr, mElfFile.mPhdrs) &&
-               parseSectionHeaders(mElfFile.mEhdr, mElfFile.mShdrs) &&
-               parseSections(mElfFile.mEhdr, mElfFile.mShdrs, mElfFile.mSections);
+        return parseExecutableHeader() && parseProgramHeaders() && parseSectionHeaders() &&
+               parseSections();
     }
 
   private:
@@ -59,20 +57,20 @@ class ElfParser {
     using Elf_Shdr = typename ElfFile_t::Elf_Shdr;
     using Elf_Dyn = typename ElfFile_t::Elf_Dyn;
 
-    bool parseExecutableHeader(Elf_Ehdr& ehdr) {
+    bool parseExecutableHeader() {
         if (!mElfStream) {
             return false;
         }
 
         mElfStream.seekg(0);
-        mElfStream.read((char*)&ehdr, sizeof(ehdr));
+        mElfStream.read((char*)&mElfFile.mEhdr, sizeof(mElfFile.mEhdr));
 
         return !!mElfStream;
     }
 
-    bool parseProgramHeaders(const Elf_Ehdr& ehdr, std::vector<Elf_Phdr>& phdrs) {
-        uint64_t phOffset = ehdr.e_phoff;
-        uint16_t phNum = ehdr.e_phnum;
+    bool parseProgramHeaders() {
+        uint64_t phOffset = mElfFile.mEhdr.e_phoff;
+        uint16_t phNum = mElfFile.mEhdr.e_phnum;
 
         if (!mElfStream) {
             return false;
@@ -87,15 +85,15 @@ class ElfParser {
                 return false;
             }
 
-            phdrs.push_back(phdr);
+            mElfFile.mPhdrs.push_back(phdr);
         }
 
         return !!mElfStream;
     }
 
-    bool parseSectionHeaders(const Elf_Ehdr& ehdr, std::vector<Elf_Shdr>& shdrs) {
-        uint64_t shOffset = ehdr.e_shoff;
-        uint16_t shNum = ehdr.e_shnum;
+    bool parseSectionHeaders() {
+        uint64_t shOffset = mElfFile.mEhdr.e_shoff;
+        uint16_t shNum = mElfFile.mEhdr.e_shnum;
 
         if (!mElfStream) {
             return false;
@@ -110,26 +108,25 @@ class ElfParser {
                 return false;
             }
 
-            shdrs.push_back(shdr);
+            mElfFile.mShdrs.push_back(shdr);
         }
 
         return !!mElfStream;
     }
 
-    bool parseSections(const Elf_Ehdr& ehdr, const std::vector<Elf_Shdr>& shdrs,
-                       std::vector<Elf_Sc>& sections) {
-        Elf_Sc sStrTblPtr;
+    bool parseSections() {
+        Elf_Sc strTblPtr;
 
         if (!mElfStream) {
             return false;
         }
 
-        for (size_t i = 0; i < shdrs.size(); i++) {
-            uint64_t sOffset = shdrs[i].sh_offset;
-            uint64_t sSize = shdrs[i].sh_size;
+        for (size_t i = 0; i < mElfFile.mShdrs.size(); i++) {
+            uint64_t sOffset = mElfFile.mShdrs[i].sh_offset;
+            uint64_t sSize = mElfFile.mShdrs[i].sh_size;
 
             Elf_Sc section;
-            if (shdrs[i].sh_type != SHT_NOBITS) {
+            if (mElfFile.mShdrs[i].sh_type != SHT_NOBITS) {
                 section.data.resize(sSize);
                 mElfStream.seekg(sOffset);
 
@@ -142,22 +139,22 @@ class ElfParser {
             section.size = sSize;
             section.index = i;
 
-            if (ehdr.e_shstrndx == i) {
-                sStrTblPtr = section;
+            if (mElfFile.mEhdr.e_shstrndx == i) {
+                strTblPtr = section;
             }
 
-            sections.push_back(section);
+            mElfFile.mSections.push_back(section);
         }
 
         // Set the data section names.
         // This has to be done after reading the data section with index e_shstrndx.
-        for (size_t i = 0; i < sections.size(); i++) {
-            uint32_t nameIdx = shdrs[i].sh_name;
-            char* st = sStrTblPtr.data.data();
+        for (size_t i = 0; i < mElfFile.mSections.size(); i++) {
+            uint32_t nameIdx = mElfFile.mShdrs[i].sh_name;
+            char* st = strTblPtr.data.data();
 
-            if (nameIdx < sStrTblPtr.size) {
-                CHECK_NE(memchr(&st[nameIdx], 0, sStrTblPtr.size - nameIdx), nullptr);
-                sections[i].name = &st[nameIdx];
+            if (nameIdx < strTblPtr.size) {
+                CHECK_NE(memchr(&st[nameIdx], 0, strTblPtr.size - nameIdx), nullptr);
+                mElfFile.mSections[i].name = &st[nameIdx];
             }
         }
 
