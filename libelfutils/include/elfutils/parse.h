@@ -48,10 +48,6 @@ class ElfParser {
                parseSections();
     }
 
-  private:
-    ElfFile_t& mElfFile;
-    std::ifstream mElfStream;
-
     using Elf_Ehdr = typename ElfFile_t::Elf_Ehdr;
     using Elf_Phdr = typename ElfFile_t::Elf_Phdr;
     using Elf_Shdr = typename ElfFile_t::Elf_Shdr;
@@ -160,6 +156,10 @@ class ElfParser {
 
         return !!mElfStream;
     }
+
+  private:
+    ElfFile_t& mElfFile;
+    std::ifstream mElfStream;
 };
 
 }  // namespace elfutils
