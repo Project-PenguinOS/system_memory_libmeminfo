@@ -83,6 +83,15 @@ class ElfFile {
     virtual const std::string& getPath() const = 0;
     virtual const std::vector<Elf_Sc>& getSections() const = 0;
     virtual std::optional<int64_t> getMinLoadSegmentAlignment() const = 0;
+
+    const Elf_Sc* findSectionByName(const std::string& name) const {
+        for (const auto& section : getSections()) {
+            if (section.name == name) {
+                return &section;
+            }
+        }
+        return nullptr;
+    }
 };
 
 // Forward declare ElfParser so that we can friend it
