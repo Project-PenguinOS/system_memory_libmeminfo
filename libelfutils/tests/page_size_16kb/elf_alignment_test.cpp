@@ -184,7 +184,10 @@ class ElfAlignmentTest : public ::testing::TestWithParam<std::string> {
                 escapeForRegex("/odm/firmware/"), escapeForRegex("/vendor/firmware/"),
                 escapeForRegex("/vendor/firmware_mnt/image"),
                 // Ignore TEE binaries ("glob: /apex/com.*.android.authfw.ta*")
-                escapeForRegex("/apex/com.") + ".*" + escapeForRegex(".android.authfw.ta")};
+                escapeForRegex("/apex/com.") + ".*" + escapeForRegex(".android.authfw.ta"),
+                // Ignore wlan debug vendor prebuilts
+                escapeForRegex("/vendor/bin/dhd"),
+                escapeForRegex("/vendor/bin/wl")};
 
         // Don't check 32-bit ELFs
         if (elfFile.is32Bit()) return;
