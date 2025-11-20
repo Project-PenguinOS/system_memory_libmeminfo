@@ -73,12 +73,25 @@ typedef struct {
 class ElfFile {
   public:
     static std::unique_ptr<ElfFile> create(const std::string& path);
+    // Creates an ElfFile object by reading just the ELF identifier to determine
+    // if it is a 32-bit or 64-bit file. Returns an unparsed ElfFile object of
+    // the correct type, or nullptr if the file is not a valid ELF file.
+    static std::unique_ptr<ElfFile> createFromIdent(const std::string& path);
     virtual ~ElfFile() = default;
     virtual bool is32Bit() const = 0;
     virtual bool is64Bit() const = 0;
     virtual const std::string& getPath() const = 0;
     virtual const std::vector<Elf_Sc>& getSections() const = 0;
-    virtual std::optional<int64_t> getMinLoadSegmentAlignment() = 0;
+    virtual std::optional<int64_t> getMinLoadSegmentAlignment() const = 0;
+
+    const Elf_Sc* findSectionByName(const std::string& name) const {
+        for (const auto& section : getSections()) {
+            if (section.name == name) {
+                return &section;
+            }
+        }
+        return nullptr;
+    }
 };
 
 // Forward declare ElfParser so that we can friend it
@@ -103,7 +116,7 @@ class ElfFileImpl : public ElfFile {
     bool is64Bit() const override { return std::is_same<Ehdr_t, Elf64_Ehdr>::value; }
     const std::string& getPath() const override { return mPath; }
     const std::vector<Elf_Sc>& getSections() const override { return mSections; }
-    std::optional<int64_t> getMinLoadSegmentAlignment() override;
+    std::optional<int64_t> getMinLoadSegmentAlignment() const override;
 
     // Const accessors for serialization and inspection
     const Ehdr_t& getEhdr() const { return mEhdr; }

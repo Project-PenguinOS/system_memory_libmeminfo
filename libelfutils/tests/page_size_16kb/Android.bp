@@ -32,14 +32,12 @@ cc_test {
     ],
 
     static_libs: [
+        "libbase",
         "libdm",
         "libext2_uuid",
         "libfs_mgr",
         "libelfutils",
-    ],
-
-    shared_libs: [
-        "libbase",
+        "libelfpolicy",
         "liblog",
     ],
 
