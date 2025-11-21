@@ -72,7 +72,6 @@ cc_test {
 
     static_libs: [
         "libdmabufinfo",
-        "libion",
         "libmeminfo",
     ],
 
