@@ -50,7 +50,7 @@ bool VerifyLoadSegmentsAlignment(const ElfFile& elfFile, uint64_t pageSize, std:
 
     if (*minAlign < pageSize) {
         errorMsg = "Minimum ELF LOAD segment alignment: 0x" + to_hex_string(*minAlign)
-                  + "is not at least 0x" + to_hex_string(pageSize) + " aligned.";
+                  + " is not at least 0x" + to_hex_string(pageSize) + " aligned.";
         return false;
     }
 
