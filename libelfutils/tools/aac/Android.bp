@@ -20,6 +20,7 @@ cc_binary_host {
         "-Wall",
         "-Werror",
     ],
+    stl: "libc++_static",
     srcs: [
         "aac.cpp",
         "main.cpp",
