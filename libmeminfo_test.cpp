@@ -37,6 +37,8 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 
+#include "meminfo_private.h"
+
 using namespace std;
 using namespace android::meminfo;
 using android::vintf::KernelVersion;
@@ -935,6 +937,7 @@ SReclaimable:      44432 kB
 SUnreclaim:        42032 kB
 KernelStack:        4880 kB
 PageTables:         2900 kB
+SecPageTables:        56 kB
 NFS_Unstable:          0 kB
 Bounce:                0 kB
 WritebackTmp:          0 kB
@@ -943,6 +946,7 @@ Committed_AS:      80296 kB
 VmallocTotal:   263061440 kB
 VmallocUsed:       65536 kB
 VmallocChunk:          0 kB
+Percpu:            18432 kB
 AnonHugePages:      6144 kB
 ShmemHugePages:        0 kB
 ShmemPmdMapped:        0 kB
@@ -986,6 +990,8 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mi.mem_cma_total_kb(), 131072);
     EXPECT_EQ(mi.mem_cma_free_kb(), 130380);
     EXPECT_EQ(mi.mem_swap_cached_kb(), 29252);
+    EXPECT_EQ(mi.mem_sec_page_tables_kb(), 56);
+    EXPECT_EQ(mi.mem_percpu_kb(), 18432);
 }
 
 TEST(SysMemInfo, TestEmptyFile) {
@@ -1038,6 +1044,8 @@ enum {
     MEMINFO_CMA_TOTAL,
     MEMINFO_CMA_FREE,
     MEMINFO_SWAP_CACHED,
+    MEMINFO_SEC_PAGE_TABLES,
+    MEMINFO_PERCPU,
     MEMINFO_COUNT
 };
 
@@ -1069,6 +1077,7 @@ SReclaimable:      44432 kB
 SUnreclaim:        42032 kB
 KernelStack:        4880 kB
 PageTables:         2900 kB
+SecPageTables:        56 kB
 NFS_Unstable:          0 kB
 Bounce:                0 kB
 WritebackTmp:          0 kB
@@ -1077,6 +1086,7 @@ Committed_AS:      80296 kB
 VmallocTotal:   263061440 kB
 VmallocUsed:       65536 kB
 VmallocChunk:          0 kB
+Percpu:            18432 kB
 AnonHugePages:      6144 kB
 ShmemHugePages:        0 kB
 ShmemPmdMapped:        0 kB
@@ -1128,6 +1138,8 @@ Hugepagesize:       2048 kB)meminfo";
     EXPECT_EQ(mem[MEMINFO_CMA_TOTAL], 131072);
     EXPECT_EQ(mem[MEMINFO_CMA_FREE], 130380);
     EXPECT_EQ(mem[MEMINFO_SWAP_CACHED], 29252);
+    EXPECT_EQ(mem[MEMINFO_SEC_PAGE_TABLES], 56);
+    EXPECT_EQ(mem[MEMINFO_PERCPU], 18432);
 }
 
 TEST(SysMemInfo, TestVmallocInfoNoMemory) {
@@ -1184,32 +1196,6 @@ TEST(SysMemInfo, TestVmallocInfoAll) {
     std::string file = std::string(tf.path);
 
     EXPECT_EQ(ReadVmallocInfo(file.c_str()), 7 * getpagesize());
-}
-
-TEST(SysMemInfo, TestReadIonHeapsSizeKb) {
-    std::string total_heaps_kb = R"total_heaps_kb(98480)total_heaps_kb";
-    uint64_t size;
-
-    TemporaryFile tf;
-    ASSERT_TRUE(tf.fd != -1);
-    ASSERT_TRUE(::android::base::WriteStringToFd(total_heaps_kb, tf.fd));
-    std::string file = std::string(tf.path);
-
-    ASSERT_TRUE(ReadIonHeapsSizeKb(&size, file));
-    EXPECT_EQ(size, 98480);
-}
-
-TEST(SysMemInfo, TestReadIonPoolsSizeKb) {
-    std::string total_pools_kb = R"total_pools_kb(416)total_pools_kb";
-    uint64_t size;
-
-    TemporaryFile tf;
-    ASSERT_TRUE(tf.fd != -1);
-    ASSERT_TRUE(::android::base::WriteStringToFd(total_pools_kb, tf.fd));
-    std::string file = std::string(tf.path);
-
-    ASSERT_TRUE(ReadIonPoolsSizeKb(&size, file));
-    EXPECT_EQ(size, 416);
 }
 
 TEST(SysMemInfo, TestReadGpuTotalUsageKb) {
@@ -1325,17 +1311,17 @@ class DmabufHeapStats : public ::testing::Test {
   public:
     virtual void SetUp() {
         fs::current_path(fs::temp_directory_path());
-        buffer_stats_path = fs::current_path() / "buffers";
-        ASSERT_TRUE(fs::create_directory(buffer_stats_path));
+        sysfs_buffer_stats_path = fs::current_path() / "buffers";
+        ASSERT_TRUE(fs::create_directory(sysfs_buffer_stats_path));
         heap_root_path = fs::current_path() / "dma_heap";
         ASSERT_TRUE(fs::create_directory(heap_root_path));
     }
     virtual void TearDown() {
-        fs::remove_all(buffer_stats_path);
+        fs::remove_all(sysfs_buffer_stats_path);
         fs::remove_all(heap_root_path);
     }
 
-    fs::path buffer_stats_path;
+    fs::path sysfs_buffer_stats_path;
     fs::path heap_root_path;
 };
 
@@ -1347,7 +1333,7 @@ TEST_F(DmabufHeapStats, TestDmabufHeapTotalExportedKb) {
     ASSERT_TRUE(android::base::WriteStringToFile("test", system_heap_path));
 
     for (unsigned int inode_number = 74831; inode_number < 74841; inode_number++) {
-        auto buffer_path = buffer_stats_path / StringPrintf("%u", inode_number);
+        auto buffer_path = sysfs_buffer_stats_path / StringPrintf("%u", inode_number);
         ASSERT_TRUE(fs::create_directories(buffer_path));
 
         auto buffer_size_path = buffer_path / "size";
@@ -1359,7 +1345,8 @@ TEST_F(DmabufHeapStats, TestDmabufHeapTotalExportedKb) {
         ASSERT_TRUE(android::base::WriteStringToFile(exp_name, exp_name_path));
     }
 
-    ASSERT_TRUE(ReadDmabufHeapTotalExportedKb(&size, heap_root_path, buffer_stats_path));
+    // This version of the API with path args is now test-only
+    ASSERT_TRUE(ReadDmabufHeapTotalExportedKb(&size, heap_root_path, sysfs_buffer_stats_path));
     ASSERT_EQ(size, 20);
 }
 

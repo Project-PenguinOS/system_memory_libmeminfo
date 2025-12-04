@@ -29,8 +29,6 @@
 namespace android {
 namespace meminfo {
 
-static constexpr const char kDmabufHeapRoot[] = "/dev/dma_heap";
-
 class SysMemInfo final {
     // System or Global memory accounting
   public:
@@ -61,17 +59,19 @@ class SysMemInfo final {
     static constexpr const char kMemCmaTotal[] = "CmaTotal:";
     static constexpr const char kMemCmaFree[] = "CmaFree:";
     static constexpr const char kMemSwapCached[] = "SwapCached:";
+    static constexpr const char kMemPercpu[] = "Percpu:";
 
     static constexpr std::initializer_list<std::string_view> kDefaultSysMemInfoTags = {
             SysMemInfo::kMemTotal,      SysMemInfo::kMemFree,         SysMemInfo::kMemBuffers,
             SysMemInfo::kMemCached,     SysMemInfo::kMemShmem,        SysMemInfo::kMemSlab,
             SysMemInfo::kMemSReclaim,   SysMemInfo::kMemSUnreclaim,   SysMemInfo::kMemSwapTotal,
             SysMemInfo::kMemSwapFree,   SysMemInfo::kMemMapped,       SysMemInfo::kMemVmallocUsed,
-            SysMemInfo::kMemPageTables, SysMemInfo::kMemSecPageTables, SysMemInfo::kMemKernelStack, 
+            SysMemInfo::kMemPageTables, SysMemInfo::kMemSecPageTables, SysMemInfo::kMemKernelStack,  
             SysMemInfo::kMemKReclaimable, SysMemInfo::kMemActive,     SysMemInfo::kMemInactive,
-            SysMemInfo::kMemUnevictable,  SysMemInfo::kMemAvailable,  SysMemInfo::kMemActiveAnon,
+            SysMemInfo::kMemUnevictable, SysMemInfo::kMemAvailable,  SysMemInfo::kMemActiveAnon,
             SysMemInfo::kMemInactiveAnon, SysMemInfo::kMemActiveFile, SysMemInfo::kMemInactiveFile,
-            SysMemInfo::kMemCmaTotal,     SysMemInfo::kMemCmaFree,    SysMemInfo::kMemSwapCached,
+            SysMemInfo::kMemCmaTotal, SysMemInfo::kMemCmaFree,    SysMemInfo::kMemSwapCached,
+            SysMemInfo::kMemPercpu,
     };
 
     SysMemInfo() = default;
@@ -117,6 +117,8 @@ class SysMemInfo final {
     uint64_t mem_swap_cached_kb() { return find_mem_by_tag(kMemSwapCached); }
     uint64_t mem_zram_kb(const char* zram_dev = nullptr) const;
     uint64_t mem_compacted_kb(const char* zram_dev = nullptr);
+    uint64_t mem_sec_page_tables_kb() const { return find_mem_by_tag(kMemSecPageTables); }
+    uint64_t mem_percpu_kb() const { return find_mem_by_tag(kMemPercpu); }
 
   private:
     std::map<std::string_view, uint64_t> mem_in_kb_;
@@ -145,14 +147,6 @@ std::optional<uint64_t> ParseSizeToBytes(const std::string& str);
 // _always_ mapped in a process and are counted for in each process.
 uint64_t ReadVmallocInfo(const char* path = "/proc/vmallocinfo");
 
-// Read ION heaps allocation size in kb
-bool ReadIonHeapsSizeKb(
-    uint64_t* size, const std::string& path = "/sys/kernel/ion/total_heaps_kb");
-
-// Read ION pools allocation size in kb
-bool ReadIonPoolsSizeKb(
-    uint64_t* size, const std::string& path = "/sys/kernel/ion/total_pools_kb");
-
 // Read DMA-BUF heap pools allocation size in kb
 bool ReadDmabufHeapPoolsSizeKb(uint64_t* size,
                             const std::string& path = "/sys/kernel/dma_heap/total_pools_kb");
@@ -167,9 +161,7 @@ bool ReadProcessGpuUsageKb(uint32_t pid, uint32_t gpu_id, uint64_t* size);
 bool ReadGpuTotalUsageKb(uint64_t* size);
 
 // Read total size of DMA-BUFs exported from the DMA-BUF heap framework in kb
-bool ReadDmabufHeapTotalExportedKb(
-        uint64_t* size, const std::string& dma_heap_root = kDmabufHeapRoot,
-        const std::string& dma_buf_sysfs_path = "/sys/kernel/dmabuf/buffers");
+bool ReadDmabufHeapTotalExportedKb(uint64_t* size);
 
 // Read total amount of memory in kb allocated by kernel drivers through CMA.
 bool ReadKernelCmaUsageKb(uint64_t* size,

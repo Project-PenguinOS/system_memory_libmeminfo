@@ -43,8 +43,10 @@ cc_library_static {
     defaults: ["dmabufinfo_defaults"],
     export_include_dirs: ["include"],
     srcs: [
-         "dmabufinfo.cpp",
-         "dmabuf_sysfs_stats.cpp",
+        "dmabufinfo.cpp",
+        "dmabuf_sysfs_stats.cpp",
+        "dmabuf_bpf_stats.cpp",
+        "dmabuf_per_buffer_stats.cpp",
     ],
     target: {
         darwin: {
