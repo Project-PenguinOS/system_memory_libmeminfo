@@ -65,8 +65,9 @@ void AppAlignmentChecker::discoverFiles() {
         std::error_code ec;
         if (std::filesystem::is_directory(currentPath, ec)) {
             for (const auto& entry : std::filesystem::directory_iterator(currentPath, ec)) {
-                std::string newDisplayPath = displayBase + "/" + entry.path().filename().string();
-                mScanQueue.emplace_back(entry.path(), newDisplayPath);
+                std::filesystem::path newDisplayPath =
+                        std::filesystem::path(displayBase) / entry.path().filename();
+                mScanQueue.emplace_back(entry.path(), newDisplayPath.string());
             }
         } else if (std::filesystem::is_regular_file(currentPath, ec)) {
             if (auto elfFile = ElfFile::create(currentPath.string()); elfFile) {
@@ -172,8 +173,12 @@ void AppAlignmentChecker::extractAndQueue(const PathPair& archivePathPair) {
     const auto& realPath = archivePathPair.first;
     const auto& displayPath = archivePathPair.second;
 
-    char tempDirTemplate[] = "/tmp/compat_check_XXXXXX";
-    char* tempDirCstr = mkdtemp(tempDirTemplate);
+    std::string tempDirTemplateStr =
+            (std::filesystem::temp_directory_path() / "compat_check_XXXXXX").string();
+    std::vector<char> tempDirTemplate(tempDirTemplateStr.begin(), tempDirTemplateStr.end());
+    tempDirTemplate.push_back('\0');
+
+    char* tempDirCstr = mkdtemp(tempDirTemplate.data());
     if (tempDirCstr == nullptr) {
         std::cout << "Failed to create temporary directory for " << displayPath << std::endl;
         mAllPassed = false;
