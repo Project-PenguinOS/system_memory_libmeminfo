@@ -29,7 +29,7 @@ namespace dmabufinfo {
  *
  * @inode: The unique inode number for the buffer.
  * @exp_name: Name of the exporter of the buffer.
- * @size: Size of the buffer.
+ * @size: Size of the buffer in bytes.
  */
 struct DmabufInfo {
     unsigned long inode;
