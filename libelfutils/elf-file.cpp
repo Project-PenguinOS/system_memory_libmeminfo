@@ -17,8 +17,6 @@
 #include <elfutils/elf-file.h>
 #include <elfutils/parse.h>
 
-#include <elf.h>
-
 #include <fstream>
 #include <functional>
 #include <iostream>

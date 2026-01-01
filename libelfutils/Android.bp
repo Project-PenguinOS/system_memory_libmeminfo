@@ -39,4 +39,15 @@ cc_library {
         "-Wall",
         "-Werror",
     ],
+    header_libs: [
+        "libc_uapi_headers",
+    ],
+    export_header_lib_headers: [
+        "libc_uapi_headers",
+    ],
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
 }
