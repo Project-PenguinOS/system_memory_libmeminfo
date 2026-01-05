@@ -20,6 +20,7 @@
 #include <elfutils/elf-file.h>
 
 #include <fstream>
+#include <optional>
 
 namespace android {
 namespace elfutils {
@@ -44,35 +45,29 @@ class ElfParser {
     ~ElfParser() = default;
 
     [[nodiscard]] bool parse() {
-        return parseExecutableHeader(mElfFile.mEhdr) &&
-               parseProgramHeaders(mElfFile.mEhdr, mElfFile.mPhdrs) &&
-               parseSectionHeaders(mElfFile.mEhdr, mElfFile.mShdrs) &&
-               parseSections(mElfFile.mEhdr, mElfFile.mShdrs, mElfFile.mSections);
+        return parseExecutableHeader() && parseProgramHeaders() && parseSectionHeaders() &&
+               parseSections();
     }
-
-  private:
-    ElfFile_t& mElfFile;
-    std::ifstream mElfStream;
 
     using Elf_Ehdr = typename ElfFile_t::Elf_Ehdr;
     using Elf_Phdr = typename ElfFile_t::Elf_Phdr;
     using Elf_Shdr = typename ElfFile_t::Elf_Shdr;
     using Elf_Dyn = typename ElfFile_t::Elf_Dyn;
 
-    bool parseExecutableHeader(Elf_Ehdr& ehdr) {
+    bool parseExecutableHeader() {
         if (!mElfStream) {
             return false;
         }
 
         mElfStream.seekg(0);
-        mElfStream.read((char*)&ehdr, sizeof(ehdr));
+        mElfStream.read((char*)&mElfFile.mEhdr, sizeof(mElfFile.mEhdr));
 
         return !!mElfStream;
     }
 
-    bool parseProgramHeaders(const Elf_Ehdr& ehdr, std::vector<Elf_Phdr>& phdrs) {
-        uint64_t phOffset = ehdr.e_phoff;
-        uint16_t phNum = ehdr.e_phnum;
+    bool parseProgramHeaders() {
+        uint64_t phOffset = mElfFile.mEhdr.e_phoff;
+        uint16_t phNum = mElfFile.mEhdr.e_phnum;
 
         if (!mElfStream) {
             return false;
@@ -87,15 +82,15 @@ class ElfParser {
                 return false;
             }
 
-            phdrs.push_back(phdr);
+            mElfFile.mPhdrs.push_back(phdr);
         }
 
         return !!mElfStream;
     }
 
-    bool parseSectionHeaders(const Elf_Ehdr& ehdr, std::vector<Elf_Shdr>& shdrs) {
-        uint64_t shOffset = ehdr.e_shoff;
-        uint16_t shNum = ehdr.e_shnum;
+    bool parseSectionHeaders() {
+        uint64_t shOffset = mElfFile.mEhdr.e_shoff;
+        uint16_t shNum = mElfFile.mEhdr.e_shnum;
 
         if (!mElfStream) {
             return false;
@@ -110,58 +105,79 @@ class ElfParser {
                 return false;
             }
 
-            shdrs.push_back(shdr);
+            mElfFile.mShdrs.push_back(shdr);
         }
 
         return !!mElfStream;
     }
 
-    bool parseSections(const Elf_Ehdr& ehdr, const std::vector<Elf_Shdr>& shdrs,
-                       std::vector<Elf_Sc>& sections) {
-        Elf_Sc sStrTblPtr;
+    bool parseSections() {
+        // First, parse all section data so we can find the string table.
+        for (size_t i = 0; i < mElfFile.mShdrs.size(); i++) {
+            Elf_Sc section;
+            if (!parseSectionData(i, section)) {
+                return false;
+            }
+            mElfFile.mSections.push_back(section);
+        }
 
+        // Find the string table section.
+        Elf_Sc* strTblPtr = nullptr;
+        if (mElfFile.mEhdr.e_shstrndx < mElfFile.mSections.size()) {
+            strTblPtr = &mElfFile.mSections[mElfFile.mEhdr.e_shstrndx];
+        }
+
+        // Then, parse all section names.
+        for (auto& section : mElfFile.mSections) {
+            parseSectionName(section, *strTblPtr);
+        }
+
+        return true;
+    }
+
+  private:
+    ElfFile_t& mElfFile;
+    std::ifstream mElfStream;
+
+    bool parseSectionData(size_t index, Elf_Sc& section) {
         if (!mElfStream) {
             return false;
         }
 
-        for (size_t i = 0; i < shdrs.size(); i++) {
-            uint64_t sOffset = shdrs[i].sh_offset;
-            uint64_t sSize = shdrs[i].sh_size;
+        const auto& shdr = mElfFile.mShdrs[index];
+        uint64_t sOffset = shdr.sh_offset;
+        uint64_t sSize = shdr.sh_size;
 
-            Elf_Sc section;
-            if (shdrs[i].sh_type != SHT_NOBITS) {
-                section.data.resize(sSize);
-                mElfStream.seekg(sOffset);
+        if (shdr.sh_type != SHT_NOBITS) {
+            section.data.resize(sSize);
+            mElfStream.seekg(sOffset);
 
-                mElfStream.read(section.data.data(), sSize);
-                if (!mElfStream) {
-                    return false;
-                }
-            }
-
-            section.size = sSize;
-            section.index = i;
-
-            if (ehdr.e_shstrndx == i) {
-                sStrTblPtr = section;
-            }
-
-            sections.push_back(section);
-        }
-
-        // Set the data section names.
-        // This has to be done after reading the data section with index e_shstrndx.
-        for (size_t i = 0; i < sections.size(); i++) {
-            uint32_t nameIdx = shdrs[i].sh_name;
-            char* st = sStrTblPtr.data.data();
-
-            if (nameIdx < sStrTblPtr.size) {
-                CHECK_NE(memchr(&st[nameIdx], 0, sStrTblPtr.size - nameIdx), nullptr);
-                sections[i].name = &st[nameIdx];
+            mElfStream.read(section.data.data(), sSize);
+            if (!mElfStream) {
+                return false;
             }
         }
 
-        return !!mElfStream;
+        section.size = sSize;
+        section.index = index;
+
+        return true;
+    }
+
+    void parseSectionName(Elf_Sc& section, const Elf_Sc& strTbl) {
+        section.name = "";  // Default name
+
+        if (strTbl.data.empty()) return;
+
+        const Elf_Shdr& shdr = mElfFile.mShdrs[section.index];
+        uint32_t nameIdx = shdr.sh_name;
+        const char* st = strTbl.data.data();
+
+        if (nameIdx >= strTbl.size) return;
+
+        if (memchr(&st[nameIdx], 0, strTbl.size - nameIdx) == nullptr) return;
+
+        section.name = &st[nameIdx];
     }
 };
 
