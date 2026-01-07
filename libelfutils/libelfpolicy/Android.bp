@@ -28,4 +28,9 @@ cc_library_static {
         "libelfutils",
     ],
     export_include_dirs: ["include"],
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
 }
