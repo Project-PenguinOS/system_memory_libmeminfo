@@ -29,7 +29,7 @@ int ElfIterator::forEachElfFromDir(const std::string& dir, const ElfCallback& ca
          std::filesystem::recursive_directory_iterator(dir)) {
         if (dirEntry.is_symlink() || !dirEntry.is_regular_file()) continue;
 
-        std::string file = dirEntry.path();
+        std::string file = dirEntry.path().string();
 
         std::unique_ptr<ElfFile> elfFile = ElfFile::create(file);
         if (!elfFile) continue;

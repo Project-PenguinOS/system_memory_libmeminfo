@@ -91,7 +91,7 @@ void AppAlignmentChecker::runZipalignChecks() {
         const int targetPageSize = kMaxSupportedPageSize;
         const bool verbose = false;
 
-        if (android::verify(pair.first.c_str(), alignment, verbose, pageAlignSharedLibs,
+        if (android::verify(pair.first.string().c_str(), alignment, verbose, pageAlignSharedLibs,
                             targetPageSize) != 0) {
             std::cout << "[ FAIL ] " << pair.second << ": Zip alignment verification failed."
                       << std::endl;
@@ -169,6 +169,18 @@ void AppAlignmentChecker::runElfChecks() {
     }
 }
 
+#ifdef _WIN32
+static char* mkdtemp(char* tmpl) {
+    if (mktemp(tmpl) == NULL) {
+        return NULL;
+    }
+    if (mkdir(tmpl) == -1) {
+        return NULL;
+    }
+    return tmpl;
+}
+#endif
+
 void AppAlignmentChecker::extractAndQueue(const PathPair& archivePathPair) {
     const auto& realPath = archivePathPair.first;
     const auto& displayPath = archivePathPair.second;
@@ -188,7 +200,7 @@ void AppAlignmentChecker::extractAndQueue(const PathPair& archivePathPair) {
     mTempDirs.push_back(tempPath);
 
     ZipArchiveHandle handle;
-    int32_t openResult = OpenArchive(realPath.c_str(), &handle);
+    int32_t openResult = OpenArchive(realPath.string().c_str(), &handle);
     if (openResult != 0) {
         std::cout << "Failed to open archive " << displayPath << ": " << ErrorCodeString(openResult)
                   << std::endl;
@@ -215,7 +227,7 @@ void AppAlignmentChecker::extractAndQueue(const PathPair& archivePathPair) {
 
         std::filesystem::create_directories(outPath.parent_path());
         android::base::unique_fd fd(
-                open(outPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, entry.unix_mode));
+                open(outPath.string().c_str(), O_WRONLY | O_CREAT | O_TRUNC, entry.unix_mode));
 
         if (fd == -1) {
             std::cout << "Failed to create file: " << outPath << std::endl;

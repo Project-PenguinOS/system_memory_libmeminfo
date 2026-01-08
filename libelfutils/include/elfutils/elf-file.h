@@ -17,13 +17,16 @@
 #pragma once
 
 #include <sys/types.h>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include <assert.h>
-
+#ifdef _WIN32
+#include <linux/elf.h>
+#else
 #include <elf.h>
+#endif
 
 namespace android {
 namespace elfutils {
