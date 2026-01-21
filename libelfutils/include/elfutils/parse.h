@@ -19,6 +19,7 @@
 #include <android-base/logging.h>
 #include <elfutils/elf-file.h>
 
+#include <filesystem>
 #include <fstream>
 #include <optional>
 
@@ -41,7 +42,13 @@ template <typename ElfFile_t>
 class ElfParser {
   public:
     explicit ElfParser(ElfFile_t& elfFile)
-        : mElfFile(elfFile), mElfStream(mElfFile.getPath(), std::ios::binary) {}
+        : mElfFile(elfFile), mElfStream(mElfFile.getPath(), std::ios::binary) {
+        std::error_code ec;
+        mFileSize = std::filesystem::file_size(mElfFile.getPath(), ec);
+        if (ec) {
+            mFileSize = 0;
+        }
+    }
 
     ~ElfParser() = default;
 
@@ -113,32 +120,35 @@ class ElfParser {
     }
 
     bool parseSections() {
-        // First, parse all section data so we can find the string table.
+        bool allSectionsParsedOk = true;
+        // First, attempt to parse all section data.
         for (size_t i = 0; i < mElfFile.mShdrs.size(); i++) {
-            Elf_Sc section;
+            // Pre-initialize the section. If parseSectionData fails, this ensures
+            // that a valid but empty section is added, maintaining correct indexing.
+            Elf_Sc section = {.size = 0, .index = static_cast<uint16_t>(i)};
             if (!parseSectionData(i, section)) {
-                return false;
+                allSectionsParsedOk = false;
             }
             mElfFile.mSections.push_back(section);
         }
 
-        // Find the string table section.
-        Elf_Sc* strTblPtr = nullptr;
+        // Find the string table section. Even if it's invalid, we'll try to parse names.
+        // The parseSectionName function is safe against corrupted tables.
         if (mElfFile.mEhdr.e_shstrndx < mElfFile.mSections.size()) {
-            strTblPtr = &mElfFile.mSections[mElfFile.mEhdr.e_shstrndx];
+            const Elf_Sc& strTbl = mElfFile.mSections[mElfFile.mEhdr.e_shstrndx];
+            // Then, parse all section names.
+            for (auto& section : mElfFile.mSections) {
+                parseSectionName(section, strTbl);
+            }
         }
 
-        // Then, parse all section names.
-        for (auto& section : mElfFile.mSections) {
-            parseSectionName(section, *strTblPtr);
-        }
-
-        return true;
+        return allSectionsParsedOk;
     }
 
   private:
     ElfFile_t& mElfFile;
     std::ifstream mElfStream;
+    uintmax_t mFileSize;
 
     bool parseSectionData(size_t index, Elf_Sc& section) {
         if (!mElfStream) {
@@ -148,6 +158,18 @@ class ElfParser {
         const auto& shdr = mElfFile.mShdrs[index];
         uint64_t sOffset = shdr.sh_offset;
         uint64_t sSize = shdr.sh_size;
+
+        if (sSize > static_cast<uint64_t>(mFileSize)) {
+            return false;
+        }
+
+        if (sOffset > static_cast<uint64_t>(mFileSize)) {
+            return false;
+        }
+
+        if (sOffset + sSize > static_cast<uint64_t>(mFileSize)) {
+            return false;
+        }
 
         if (shdr.sh_type != SHT_NOBITS) {
             section.data.resize(sSize);
