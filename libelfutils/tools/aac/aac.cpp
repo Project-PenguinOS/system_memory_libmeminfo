@@ -37,7 +37,7 @@ using ::android::elfutils::Elf_Sc;
 using ::android::elfutils::ElfFile;
 using ::android::elfutils::ElfParser;
 
-AppAlignmentChecker::AppAlignmentChecker(const std::vector<PathPair>& initialPaths)
+AppAlignmentChecker::AppAlignmentChecker(const std::vector<PathInfo>& initialPaths)
     : mScanQueue(initialPaths) {}
 
 AppAlignmentChecker::~AppAlignmentChecker() {
@@ -57,22 +57,23 @@ bool AppAlignmentChecker::run() {
 void AppAlignmentChecker::discoverFiles() {
     std::cout << "--- Discovering and extracting files ---" << std::endl;
     while (!mScanQueue.empty()) {
-        PathPair currentItem = mScanQueue.back();
+        PathInfo currentItem = mScanQueue.back();
         mScanQueue.pop_back();
-        const auto& currentPath = currentItem.first;
-        const auto& displayBase = currentItem.second;
+        const auto& currentPath = currentItem.realPath;
+        const auto& displayBase = currentItem.displayPath;
 
         std::error_code ec;
         if (std::filesystem::is_directory(currentPath, ec)) {
             for (const auto& entry : std::filesystem::directory_iterator(currentPath, ec)) {
                 std::filesystem::path newDisplayPath =
                         std::filesystem::path(displayBase) / entry.path().filename();
-                mScanQueue.emplace_back(entry.path(), newDisplayPath.string());
+                mScanQueue.push_back({entry.path(), newDisplayPath.string()});
             }
         } else if (std::filesystem::is_regular_file(currentPath, ec)) {
-            if (auto elfFile = ElfFile::create(currentPath.string()); elfFile) {
-                mElfFiles.push_back(currentItem);
+            if (auto elfFile = ElfFile::createFromIdent(currentPath.string()); elfFile) {
+                mElfFiles.push_back({currentItem, std::move(elfFile)});
             } else {
+                // Not an ELF file, check for other types like APK.
                 std::string extension = currentPath.extension().string();
                 if (extension == ".apk") {
                     mZipFiles.push_back(currentItem);
@@ -85,36 +86,29 @@ void AppAlignmentChecker::discoverFiles() {
 
 void AppAlignmentChecker::runZipalignChecks() {
     std::cout << "\n--- Running Zipalign Checks ---" << std::endl;
-    for (const auto& pair : mZipFiles) {
+    for (const auto& paths : mZipFiles) {
         const int alignment = 4;
         const bool pageAlignSharedLibs = true;
         const int targetPageSize = kMaxSupportedPageSize;
         const bool verbose = false;
 
-        if (android::verify(pair.first.string().c_str(), alignment, verbose, pageAlignSharedLibs,
-                            targetPageSize) != 0) {
-            std::cout << "[ FAIL ] " << pair.second << ": Zip alignment verification failed."
+        if (android::verify(paths.realPath.string().c_str(), alignment, verbose,
+                            pageAlignSharedLibs, targetPageSize) != 0) {
+            std::cout << "[ FAIL ] " << paths.displayPath << ": Zip alignment verification failed."
                       << std::endl;
             mAllPassed = false;
         } else {
-            std::cout << "[ PASS ] " << pair.second << std::endl;
+            std::cout << "[ PASS ] " << paths.displayPath << std::endl;
         }
     }
 }
 
 void AppAlignmentChecker::runElfChecks() {
     std::cout << "\n--- Running ELF Compatibility Checks ---" << std::endl;
-    for (const auto& pair : mElfFiles) {
-        const auto& path = pair.first;
-        const auto& displayPath = pair.second;
+    for (auto& entry : mElfFiles) {
+        const std::string& displayPath = entry.paths.displayPath;
+        std::unique_ptr<ElfFile>& elfFile = entry.elfFile;
         std::string errorMsg;
-
-        auto elfFile = ElfFile::createFromIdent(path.string());
-        if (!elfFile) {
-            std::cout << "[ FAIL ] " << displayPath << ": Not a valid ELF file." << std::endl;
-            mAllPassed = false;
-            continue;
-        }
 
         // The 16KB and RELRO checks are only applicable to 64-bit ELF files.
         // Silently ignore 32-bit files as they are not subject to these requirements.
@@ -122,31 +116,51 @@ void AppAlignmentChecker::runElfChecks() {
             continue;
         }
 
-        auto* elf64File = static_cast<Elf64_File*>(elfFile.get());
-        bool parsedOk = parse64BitElf(*elf64File, path);
-        if (!parsedOk) {
-            std::cout << "[ FAIL ] " << displayPath << ": Could not parse ELF file." << std::endl;
-            mAllPassed = false;
+        if (!elfFile->parseProgramHeaders()) {
+            std::cout
+                    << "[ WARN ] " << displayPath << std::endl
+                    << "          Potentially obfuscated or corrupted ELF file detected. Skipping."
+                    << std::endl;
             continue;
         }
+
         bool alignmentOk = android::elfpolicy::VerifyLoadSegmentsAlignment(
                 *elfFile, kMaxSupportedPageSize, errorMsg);
         if (!alignmentOk) {
             std::cout << "[ FAIL ] " << displayPath << " (LOAD Segments)" << std::endl;
             std::cout << "         " << errorMsg << std::endl;
-            mAllPassed = false;
         } else {
             std::cout << "[ PASS ] " << displayPath << " (LOAD Segments)" << std::endl;
         }
 
         errorMsg.clear();
 
+        if (!elfFile->parseSections()) {
+            std::cout << "[ WARN ] " << displayPath << std::endl
+                      << "          Potentially obfuscated or corrupted ELF file detected; some "
+                         "checks may be incomplete."
+                      << std::endl;
+        }
+
         bool relroOk =
                 android::elfpolicy::VerifyRelroSegments(*elfFile, kMaxSupportedPageSize, errorMsg);
         if (!relroOk) {
             std::cout << "[ FAIL ] " << displayPath << " (RELRO Segment)" << std::endl;
             std::cout << "         " << errorMsg << std::endl;
+        } else {
+            if (!errorMsg.empty()) {
+                std::cout << "[ WARN ] " << displayPath << " (RELRO Segment)" << std::endl;
+                std::cout << "         " << errorMsg << std::endl;
+            } else {
+                std::cout << "[ PASS ] " << displayPath << " (RELRO Segment)" << std::endl;
+            }
+        }
 
+        if (!alignmentOk || !relroOk) {
+            mAllPassed = false;
+            // Try to print NDK/toolchain info for context on any failure.
+            // These functions will fail gracefully if the required sections weren't parsed.
+            auto* elf64File = static_cast<Elf64_File*>(elfFile.get());
             if (auto ndkVersion = getNdkVersion(*elf64File); ndkVersion) {
                 std::cout << "           NDK Version: " << *ndkVersion << std::endl;
             }
@@ -156,14 +170,6 @@ void AppAlignmentChecker::runElfChecks() {
                 for (size_t i = 1; i < toolchains.size(); ++i) {
                     std::cout << "           | " << toolchains[i] << std::endl;
                 }
-            }
-            mAllPassed = false;
-        } else {
-            if (!errorMsg.empty()) {
-                std::cout << "[ WARN ] " << displayPath << " (RELRO Segment)" << std::endl;
-                std::cout << "         " << errorMsg << std::endl;
-            } else {
-                std::cout << "[ PASS ] " << displayPath << " (RELRO Segment)" << std::endl;
             }
         }
     }
@@ -181,9 +187,9 @@ static char* mkdtemp(char* tmpl) {
 }
 #endif
 
-void AppAlignmentChecker::extractAndQueue(const PathPair& archivePathPair) {
-    const auto& realPath = archivePathPair.first;
-    const auto& displayPath = archivePathPair.second;
+void AppAlignmentChecker::extractAndQueue(const PathInfo& archivePaths) {
+    const std::filesystem::path& realPath = archivePaths.realPath;
+    const std::string& displayPath = archivePaths.displayPath;
 
     std::string tempDirTemplateStr =
             (std::filesystem::temp_directory_path() / "compat_check_XXXXXX").string();
@@ -244,32 +250,7 @@ void AppAlignmentChecker::extractAndQueue(const PathPair& archivePathPair) {
     EndIteration(cookie);
     CloseArchive(handle);
 
-    mScanQueue.emplace_back(tempPath, displayPath);
-}
-
-bool AppAlignmentChecker::parse64BitElf(Elf64_File& elf64File, const std::filesystem::path& path) {
-    ElfParser<Elf64_File> parser64(elf64File);
-
-    if (!parser64.parseExecutableHeader() || !parser64.parseProgramHeaders()) return false;
-
-    std::error_code ec;
-    const auto fileSize = std::filesystem::file_size(path, ec);
-    if (ec) {
-        std::cout << "Error getting file size for " << path << ": " << ec.message() << std::endl;
-        return false;
-    }
-    auto& ehdr = elf64File.getEhdr();
-
-    if (ehdr.e_shoff == 0) return true;
-
-    uint64_t sh_end = (uint64_t)ehdr.e_shoff + (uint64_t)ehdr.e_shnum * ehdr.e_shentsize;
-    if (sh_end > fileSize) {
-        LOG(INFO) << "Invalid section header offset in " << elf64File.getPath()
-                  << ". Skipping section parsing.";
-        return true;
-    }
-
-    return parser64.parseSectionHeaders() && parser64.parseSections();
+    mScanQueue.push_back({tempPath, displayPath});
 }
 
 std::optional<std::string> AppAlignmentChecker::getNdkVersion(const Elf64_File& elfFile) {

@@ -63,6 +63,8 @@ class ElfParser {
     using Elf_Dyn = typename ElfFile_t::Elf_Dyn;
 
     bool parseExecutableHeader() {
+        if (mParsedExecutableHeader) return true;
+
         if (!mElfStream) {
             return false;
         }
@@ -70,10 +72,13 @@ class ElfParser {
         mElfStream.seekg(0);
         mElfStream.read((char*)&mElfFile.mEhdr, sizeof(mElfFile.mEhdr));
 
-        return !!mElfStream;
+        mParsedExecutableHeader = !!mElfStream;
+        return mParsedExecutableHeader;
     }
 
     bool parseProgramHeaders() {
+        if (mParsedProgramHeaders) return true;
+
         uint64_t phOffset = mElfFile.mEhdr.e_phoff;
         uint16_t phNum = mElfFile.mEhdr.e_phnum;
 
@@ -93,10 +98,13 @@ class ElfParser {
             mElfFile.mPhdrs.push_back(phdr);
         }
 
-        return !!mElfStream;
+        mParsedProgramHeaders = !!mElfStream;
+        return mParsedProgramHeaders;
     }
 
     bool parseSectionHeaders() {
+        if (mParsedSectionHeaders) return true;
+
         uint64_t shOffset = mElfFile.mEhdr.e_shoff;
         uint16_t shNum = mElfFile.mEhdr.e_shnum;
 
@@ -116,10 +124,13 @@ class ElfParser {
             mElfFile.mShdrs.push_back(shdr);
         }
 
-        return !!mElfStream;
+        mParsedSectionHeaders = !!mElfStream;
+        return mParsedSectionHeaders;
     }
 
     bool parseSections() {
+        if (mParsedSections) return true;
+
         bool allSectionsParsedOk = true;
         // First, attempt to parse all section data.
         for (size_t i = 0; i < mElfFile.mShdrs.size(); i++) {
@@ -142,13 +153,18 @@ class ElfParser {
             }
         }
 
-        return allSectionsParsedOk;
+        mParsedSections = allSectionsParsedOk;
+        return mParsedSections;
     }
 
   private:
     ElfFile_t& mElfFile;
     std::ifstream mElfStream;
     uintmax_t mFileSize;
+    bool mParsedExecutableHeader = false;
+    bool mParsedProgramHeaders = false;
+    bool mParsedSectionHeaders = false;
+    bool mParsedSections = false;
 
     bool parseSectionData(size_t index, Elf_Sc& section) {
         if (!mElfStream) {

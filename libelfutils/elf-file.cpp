@@ -118,6 +118,18 @@ bool ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>::setDynamicEntries(
     return false;
 }
 
+template <typename Ehdr_t, typename Phdr_t, typename Shdr_t, typename Dyn_t>
+bool ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>::parseProgramHeaders() {
+    ElfParser<ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>> parser(*this);
+    return parser.parseExecutableHeader() && parser.parseProgramHeaders();
+}
+
+template <typename Ehdr_t, typename Phdr_t, typename Shdr_t, typename Dyn_t>
+bool ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>::parseSections() {
+    ElfParser<ElfFileImpl<Ehdr_t, Phdr_t, Shdr_t, Dyn_t>> parser(*this);
+    return parser.parseExecutableHeader() && parser.parseSectionHeaders() && parser.parseSections();
+}
+
 /*
  * Returns the minimum of all PT_LOAD segments' p_align.
  */
