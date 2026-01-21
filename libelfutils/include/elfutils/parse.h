@@ -40,7 +40,8 @@ namespace elfutils {
 template <typename ElfFile_t>
 class ElfParser {
   public:
-    explicit ElfParser(ElfFile_t& elfFile) : mElfFile(elfFile), mElfStream(mElfFile.getPath()) {}
+    explicit ElfParser(ElfFile_t& elfFile)
+        : mElfFile(elfFile), mElfStream(mElfFile.getPath(), std::ios::binary) {}
 
     ~ElfParser() = default;
 

@@ -226,8 +226,11 @@ void AppAlignmentChecker::extractAndQueue(const PathPair& archivePathPair) {
         }
 
         std::filesystem::create_directories(outPath.parent_path());
-        android::base::unique_fd fd(
-                open(outPath.string().c_str(), O_WRONLY | O_CREAT | O_TRUNC, entry.unix_mode));
+        int open_flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+        open_flags |= O_BINARY;
+#endif
+        android::base::unique_fd fd(open(outPath.string().c_str(), open_flags, entry.unix_mode));
 
         if (fd == -1) {
             std::cout << "Failed to create file: " << outPath << std::endl;

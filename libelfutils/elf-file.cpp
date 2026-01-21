@@ -29,7 +29,7 @@ namespace android {
 namespace elfutils {
 
 std::unique_ptr<ElfFile> ElfFile::createFromIdent(const std::string& path) {
-    std::ifstream elfStream(path);
+    std::ifstream elfStream(path, std::ios::binary);
     if (!elfStream) {
         return {};
     }
