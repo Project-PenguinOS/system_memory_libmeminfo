@@ -33,4 +33,9 @@ cc_binary_host {
         "libbase",
         "liblog",
     ],
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
 }

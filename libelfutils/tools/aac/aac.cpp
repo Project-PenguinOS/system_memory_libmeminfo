@@ -65,8 +65,9 @@ void AppAlignmentChecker::discoverFiles() {
         std::error_code ec;
         if (std::filesystem::is_directory(currentPath, ec)) {
             for (const auto& entry : std::filesystem::directory_iterator(currentPath, ec)) {
-                std::string newDisplayPath = displayBase + "/" + entry.path().filename().string();
-                mScanQueue.emplace_back(entry.path(), newDisplayPath);
+                std::filesystem::path newDisplayPath =
+                        std::filesystem::path(displayBase) / entry.path().filename();
+                mScanQueue.emplace_back(entry.path(), newDisplayPath.string());
             }
         } else if (std::filesystem::is_regular_file(currentPath, ec)) {
             if (auto elfFile = ElfFile::create(currentPath.string()); elfFile) {
@@ -90,7 +91,7 @@ void AppAlignmentChecker::runZipalignChecks() {
         const int targetPageSize = kMaxSupportedPageSize;
         const bool verbose = false;
 
-        if (android::verify(pair.first.c_str(), alignment, verbose, pageAlignSharedLibs,
+        if (android::verify(pair.first.string().c_str(), alignment, verbose, pageAlignSharedLibs,
                             targetPageSize) != 0) {
             std::cout << "[ FAIL ] " << pair.second << ": Zip alignment verification failed."
                       << std::endl;
@@ -168,12 +169,28 @@ void AppAlignmentChecker::runElfChecks() {
     }
 }
 
+#ifdef _WIN32
+static char* mkdtemp(char* tmpl) {
+    if (mktemp(tmpl) == NULL) {
+        return NULL;
+    }
+    if (mkdir(tmpl) == -1) {
+        return NULL;
+    }
+    return tmpl;
+}
+#endif
+
 void AppAlignmentChecker::extractAndQueue(const PathPair& archivePathPair) {
     const auto& realPath = archivePathPair.first;
     const auto& displayPath = archivePathPair.second;
 
-    char tempDirTemplate[] = "/tmp/compat_check_XXXXXX";
-    char* tempDirCstr = mkdtemp(tempDirTemplate);
+    std::string tempDirTemplateStr =
+            (std::filesystem::temp_directory_path() / "compat_check_XXXXXX").string();
+    std::vector<char> tempDirTemplate(tempDirTemplateStr.begin(), tempDirTemplateStr.end());
+    tempDirTemplate.push_back('\0');
+
+    char* tempDirCstr = mkdtemp(tempDirTemplate.data());
     if (tempDirCstr == nullptr) {
         std::cout << "Failed to create temporary directory for " << displayPath << std::endl;
         mAllPassed = false;
@@ -183,7 +200,7 @@ void AppAlignmentChecker::extractAndQueue(const PathPair& archivePathPair) {
     mTempDirs.push_back(tempPath);
 
     ZipArchiveHandle handle;
-    int32_t openResult = OpenArchive(realPath.c_str(), &handle);
+    int32_t openResult = OpenArchive(realPath.string().c_str(), &handle);
     if (openResult != 0) {
         std::cout << "Failed to open archive " << displayPath << ": " << ErrorCodeString(openResult)
                   << std::endl;
@@ -210,7 +227,7 @@ void AppAlignmentChecker::extractAndQueue(const PathPair& archivePathPair) {
 
         std::filesystem::create_directories(outPath.parent_path());
         android::base::unique_fd fd(
-                open(outPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, entry.unix_mode));
+                open(outPath.string().c_str(), O_WRONLY | O_CREAT | O_TRUNC, entry.unix_mode));
 
         if (fd == -1) {
             std::cout << "Failed to create file: " << outPath << std::endl;

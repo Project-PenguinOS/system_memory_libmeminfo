@@ -18,10 +18,9 @@
 #include <iomanip>
 #include <sstream>
 
-#include "elfpolicy/elf_policy.h"
-
-#include <elf.h>
 #include <elfutils/elf-file.h>
+
+#include "elfpolicy/elf_policy.h"
 
 namespace android {
 namespace elfpolicy {
