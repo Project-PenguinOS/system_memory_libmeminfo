@@ -21,7 +21,7 @@
 
 // Parses command-line arguments, validates paths.
 // Returns true if the program should proceed, false otherwise.
-bool ParseArguments(int argc, char* argv[], std::vector<PathPair>& initialPaths) {
+bool ParseArguments(int argc, char* argv[], std::vector<PathInfo>& initialPaths) {
     if (argc < 2) return false;
 
     bool argsOk = true;
@@ -37,7 +37,7 @@ bool ParseArguments(int argc, char* argv[], std::vector<PathPair>& initialPaths)
             std::cout << "Error: Initial path does not exist: " << path << std::endl;
             argsOk = false;
         } else {
-            initialPaths.emplace_back(path, path.filename().string());
+            initialPaths.push_back({path, path.filename().string()});
         }
     }
 
@@ -45,7 +45,7 @@ bool ParseArguments(int argc, char* argv[], std::vector<PathPair>& initialPaths)
 }
 
 int main(int argc, char* argv[]) {
-    std::vector<PathPair> initialPaths;
+    std::vector<PathInfo> initialPaths;
     if (!ParseArguments(argc, argv, initialPaths) || initialPaths.empty()) {
         AppAlignmentChecker::printHelp(argv[0]);
         return EXIT_FAILURE;
