@@ -86,6 +86,8 @@ class ElfFile {
     virtual const std::string& getPath() const = 0;
     virtual const std::vector<Elf_Sc>& getSections() const = 0;
     virtual std::optional<int64_t> getMinLoadSegmentAlignment() const = 0;
+    virtual bool parseProgramHeaders() = 0;
+    virtual bool parseSections() = 0;
 
     const Elf_Sc* findSectionByName(const std::string& name) const {
         for (const auto& section : getSections()) {
@@ -129,6 +131,8 @@ class ElfFileImpl : public ElfFile {
     // Methods for manipulating the dynamic section
     bool getDynamicEntries(std::vector<Elf_Dyn>& entries) const;
     bool setDynamicEntries(const std::vector<Elf_Dyn>& entries);
+    bool parseProgramHeaders() override;
+    bool parseSections() override;
 
   protected:
     Elf_Ehdr mEhdr;
