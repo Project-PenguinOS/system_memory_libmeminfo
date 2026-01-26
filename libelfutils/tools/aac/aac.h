@@ -23,12 +23,24 @@
 
 #include <elfutils/elf-file.h>
 
-using PathPair = std::pair<std::filesystem::path, std::string>;
+// Holds the real on-disk path and the path to be displayed in output.
+struct PathInfo {
+    std::filesystem::path realPath;
+    std::string displayPath;
+};
+
 using ::android::elfutils::Elf64_File;
+using ::android::elfutils::ElfFile;
+
+// Represents a discovered ELF file, holding its path info and parsed object.
+struct ElfFileEntry {
+    PathInfo paths;
+    std::unique_ptr<ElfFile> elfFile;
+};
 
 class AppAlignmentChecker {
   public:
-    explicit AppAlignmentChecker(const std::vector<PathPair>& initialPaths);
+    explicit AppAlignmentChecker(const std::vector<PathInfo>& initialPaths);
     ~AppAlignmentChecker();
 
     bool run();
@@ -38,14 +50,13 @@ class AppAlignmentChecker {
     void discoverFiles();
     void runZipalignChecks();
     void runElfChecks();
-    void extractAndQueue(const PathPair& archivePathPair);
-    bool parse64BitElf(Elf64_File& elf64File, const std::filesystem::path& path);
+    void extractAndQueue(const PathInfo& archivePathPair);
     std::optional<std::string> getNdkVersion(const Elf64_File& elfFile);
     std::vector<std::string> getToolchainStrings(const Elf64_File& elfFile);
 
-    std::vector<PathPair> mZipFiles;
-    std::vector<PathPair> mElfFiles;
+    std::vector<PathInfo> mZipFiles;
+    std::vector<ElfFileEntry> mElfFiles;
     std::vector<std::filesystem::path> mTempDirs;
-    std::vector<PathPair> mScanQueue;
+    std::vector<PathInfo> mScanQueue;
     bool mAllPassed = true;
 };
