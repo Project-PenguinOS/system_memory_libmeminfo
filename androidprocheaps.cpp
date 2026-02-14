@@ -172,10 +172,11 @@ bool ExtractAndroidHeapStatsFromFile(const std::string& smaps_path, AndroidHeapS
         if (is_swappable && (usage.pss > 0)) {
             float sharing_proportion = 0.0;
             if ((usage.shared_clean > 0) || (usage.shared_dirty > 0)) {
-                sharing_proportion =
-                        (usage.pss - usage.uss) / (usage.shared_clean + usage.shared_dirty);
+                sharing_proportion = static_cast<float>(usage.pss - usage.uss) /
+                                     (usage.shared_clean + usage.shared_dirty);
             }
-            swapable_pss = (sharing_proportion * usage.shared_clean) + usage.private_clean;
+            swapable_pss = static_cast<uint64_t>(sharing_proportion * usage.shared_clean) +
+                           usage.private_clean;
         }
 
         stats[which_heap].pss += usage.pss;
