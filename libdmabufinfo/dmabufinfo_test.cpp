@@ -33,6 +33,7 @@
 #include <android-base/unique_fd.h>
 #include <unistd.h>
 
+#include "dmabuf_bpf_stats.h"
 #include "dmabuf_sysfs_stats.h"
 #include <dmabufinfo/dmabufinfo.h>
 
@@ -418,4 +419,9 @@ TEST_F(DmaBufProcessStatsTest, TestReadDmaBufMapRefs) {
     const auto& pid_maprefs2 = maprefs2.find(pid);
     ASSERT_NE(pid_maprefs2, maprefs2.end());
     ASSERT_EQ(pid_maprefs2->second, 1);
+}
+
+TEST(DmaBufBPF, IteratorLoaded) {
+    android::dmabufinfo::DmabufPerBufferStats stats;
+    ASSERT_TRUE(android::dmabufinfo::GetDmabufBPFStats(stats));
 }
