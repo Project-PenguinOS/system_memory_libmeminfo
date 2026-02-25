@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <ziparchive/zip_archive.h>
+#include <ziparchive/zip_error.h>
 
 #include <fstream>
 
@@ -208,6 +209,11 @@ void AppAlignmentChecker::extractAndQueue(const PathInfo& archivePaths) {
     ZipArchiveHandle handle;
     int32_t openResult = OpenArchive(realPath.string().c_str(), &handle);
     if (openResult != 0) {
+        if (openResult == kEmptyArchive) {
+            std::cout << "Archive " << displayPath << " is empty. Skipping extraction."
+                      << std::endl;
+            return;
+        }
         std::cout << "Failed to open archive " << displayPath << ": " << ErrorCodeString(openResult)
                   << std::endl;
         mAllPassed = false;
