@@ -35,6 +35,8 @@ cc_library {
     ],
     shared_libs: [
         "libbase",
+        "libarchivestager",
+        "libziparchive",
     ],
     cflags: [
         "-Wall",
@@ -63,10 +65,16 @@ cc_test {
         "libbase",
         "liblog",
         "libelfutils",
+        "libziparchive",
+        "libarchivestager",
     ],
     data: [
         "testdata/not_an_elf.txt",
         "testdata/test_elf.o",
+        "testdata/invalid.apk",
+        "testdata/invalid.zip",
+        "testdata/valid.apk",
+        "testdata/valid.zip",
     ],
     target: {
         windows: {
