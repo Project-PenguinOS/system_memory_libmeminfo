@@ -39,3 +39,19 @@ cc_binary_host {
         },
     },
 }
+
+cc_test_host {
+    name: "aac_tests",
+    srcs: [
+        "aac.cpp",
+        "aac_test.cpp",
+    ],
+    static_libs: [
+        "libelfpolicy",
+        "libelfutils",
+        "libzipalign",
+        "libziparchive",
+        "libbase",
+        "liblog",
+    ],
+}

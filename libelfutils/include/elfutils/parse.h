@@ -72,7 +72,7 @@ class ElfParser {
         mElfStream.seekg(0);
         mElfStream.read((char*)&mElfFile.mEhdr, sizeof(mElfFile.mEhdr));
 
-        mParsedExecutableHeader = !!mElfStream;
+        mParsedExecutableHeader = (mElfStream.gcount() == sizeof(mElfFile.mEhdr));
         return mParsedExecutableHeader;
     }
 
@@ -86,19 +86,31 @@ class ElfParser {
             return false;
         }
 
+        if (phNum == 0) {
+            mParsedProgramHeaders = true;
+            return true;
+        }
+
+        uint64_t phEnd;
+        if (__builtin_add_overflow(phOffset, static_cast<uint64_t>(phNum) * sizeof(Elf_Phdr),
+                                   &phEnd) ||
+            phEnd > static_cast<uint64_t>(mFileSize)) {
+            return false;
+        }
+
         mElfStream.seekg(phOffset);
         for (int i = 0; i < phNum; i++) {
             Elf_Phdr phdr;
 
             mElfStream.read((char*)&phdr, sizeof(phdr));
-            if (!mElfStream) {
+            if (mElfStream.gcount() != sizeof(phdr)) {
                 return false;
             }
 
             mElfFile.mPhdrs.push_back(phdr);
         }
 
-        mParsedProgramHeaders = !!mElfStream;
+        mParsedProgramHeaders = true;
         return mParsedProgramHeaders;
     }
 
@@ -112,19 +124,31 @@ class ElfParser {
             return false;
         }
 
+        if (shNum == 0) {
+            mParsedSectionHeaders = true;
+            return true;
+        }
+
+        uint64_t shEnd;
+        if (__builtin_add_overflow(shOffset, static_cast<uint64_t>(shNum) * sizeof(Elf_Shdr),
+                                   &shEnd) ||
+            shEnd > static_cast<uint64_t>(mFileSize)) {
+            return false;
+        }
+
         mElfStream.seekg(shOffset);
         for (int i = 0; i < shNum; i++) {
             Elf_Shdr shdr;
 
             mElfStream.read((char*)&shdr, sizeof(shdr));
-            if (!mElfStream) {
+            if (mElfStream.gcount() != sizeof(shdr)) {
                 return false;
             }
 
             mElfFile.mShdrs.push_back(shdr);
         }
 
-        mParsedSectionHeaders = !!mElfStream;
+        mParsedSectionHeaders = true;
         return mParsedSectionHeaders;
     }
 
@@ -174,28 +198,27 @@ class ElfParser {
         const auto& shdr = mElfFile.mShdrs[index];
         uint64_t sOffset = shdr.sh_offset;
         uint64_t sSize = shdr.sh_size;
+        uint32_t sType = shdr.sh_type;
 
-        if (sSize > static_cast<uint64_t>(mFileSize)) {
-            return false;
-        }
+        if (sType != SHT_NOBITS) {
+            uint64_t sEnd;
+            if (__builtin_add_overflow(sOffset, sSize, &sEnd) ||
+                sEnd > static_cast<uint64_t>(mFileSize)) {
+                return false;
+            }
 
-        if (sOffset > static_cast<uint64_t>(mFileSize)) {
-            return false;
-        }
-
-        if (sOffset + sSize > static_cast<uint64_t>(mFileSize)) {
-            return false;
-        }
-
-        if (shdr.sh_type != SHT_NOBITS) {
             section.data.resize(sSize);
             mElfStream.seekg(sOffset);
 
             mElfStream.read(section.data.data(), sSize);
-            if (!mElfStream) {
+            if (mElfStream.gcount() != static_cast<std::streamsize>(sSize)) {
                 return false;
             }
         }
+
+        // NOTE: We don't populate section.data for the SHT_NOBITS sections
+        // as these are not present on the file, and only become relevant
+        // after the ELF is loaded into memory.
 
         section.size = sSize;
         section.index = index;
