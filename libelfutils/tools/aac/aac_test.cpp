@@ -63,3 +63,24 @@ TEST(AppAlignmentCheckerTest, ValidApkPasses) {
     AppAlignmentChecker checker(paths);
     EXPECT_TRUE(checker.run());
 }
+
+TEST(AppAlignmentCheckerTest, MultipleApksWithOneInvalidFails) {
+    TemporaryDir td;
+    std::filesystem::path validApkPath = std::filesystem::path(td.path) / "valid.apk";
+    std::filesystem::path invalidApkPath = std::filesystem::path(td.path) / "invalid.apk";
+
+    // An empty but structurally valid zip file.
+    const char kEmptyZip[] = {'\x50', '\x4b', '\x05', '\x06', '\x00', '\x00', '\x00', '\x00',
+                              '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00',
+                              '\x00', '\x00', '\x00', '\x00', '\x00', '\x00'};
+
+    android::base::WriteStringToFile(std::string(kEmptyZip, sizeof(kEmptyZip)),
+                                     validApkPath.string());
+    android::base::WriteStringToFile("not an apk", invalidApkPath.string());
+
+    // Processing invalid then valid should result in overall failure,
+    // ensuring a subsequent success doesn't overwrite a previous failure.
+    std::vector<PathInfo> paths = {{invalidApkPath, "invalid.apk"}, {validApkPath, "valid.apk"}};
+    AppAlignmentChecker checker(paths);
+    EXPECT_FALSE(checker.run());
+}

@@ -23,14 +23,14 @@
 
 #include <elfutils/elf-file.h>
 
+using ::android::elfutils::Elf64_File;
+using ::android::elfutils::ElfFile;
+
 // Holds the real on-disk path and the path to be displayed in output.
 struct PathInfo {
     std::filesystem::path realPath;
     std::string displayPath;
 };
-
-using ::android::elfutils::Elf64_File;
-using ::android::elfutils::ElfFile;
 
 // Represents a discovered ELF file, holding its path info and parsed object.
 struct ElfFileEntry {

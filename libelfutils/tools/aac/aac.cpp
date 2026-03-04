@@ -38,12 +38,16 @@ using ::android::elfutils::Elf_Sc;
 using ::android::elfutils::ElfFile;
 using ::android::elfutils::ElfParser;
 
+namespace fs = std::filesystem;
+
+static bool stageArchiveContents(const fs::path& archivePath, fs::path& stagedEntriesRootDir);
+
 AppAlignmentChecker::AppAlignmentChecker(const std::vector<PathInfo>& initialPaths)
     : mScanQueue(initialPaths) {}
 
 AppAlignmentChecker::~AppAlignmentChecker() {
     for (const auto& tempDir : mTempDirs) {
-        std::filesystem::remove_all(tempDir);
+        fs::remove_all(tempDir);
     }
 }
 
@@ -64,13 +68,12 @@ void AppAlignmentChecker::discoverFiles() {
         const auto& displayBase = currentItem.displayPath;
 
         std::error_code ec;
-        if (std::filesystem::is_directory(currentPath, ec)) {
-            for (const auto& entry : std::filesystem::directory_iterator(currentPath, ec)) {
-                std::filesystem::path newDisplayPath =
-                        std::filesystem::path(displayBase) / entry.path().filename();
+        if (fs::is_directory(currentPath, ec)) {
+            for (const auto& entry : fs::directory_iterator(currentPath, ec)) {
+                fs::path newDisplayPath = fs::path(displayBase) / entry.path().filename();
                 mScanQueue.push_back({entry.path(), newDisplayPath.string()});
             }
-        } else if (std::filesystem::is_regular_file(currentPath, ec)) {
+        } else if (fs::is_regular_file(currentPath, ec)) {
             if (auto elfFile = ElfFile::createFromIdent(currentPath.string()); elfFile) {
                 mElfFiles.push_back({currentItem, std::move(elfFile)});
             } else {
@@ -82,6 +85,16 @@ void AppAlignmentChecker::discoverFiles() {
                 }
             }
         }
+    }
+}
+
+void AppAlignmentChecker::extractAndQueue(const PathInfo& archivePathPair) {
+    const auto& displayBase = archivePathPair.displayPath;
+    fs::path stagedEntriesRootDir = fs::path("");
+    mAllPassed = stageArchiveContents(archivePathPair.realPath, stagedEntriesRootDir) && mAllPassed;
+    if (!stagedEntriesRootDir.empty()) {
+        mScanQueue.push_back({stagedEntriesRootDir, displayBase});
+        mTempDirs.push_back(stagedEntriesRootDir);
     }
 }
 
@@ -174,89 +187,6 @@ void AppAlignmentChecker::runElfChecks() {
             }
         }
     }
-}
-
-#ifdef _WIN32
-static char* mkdtemp(char* tmpl) {
-    if (mktemp(tmpl) == NULL) {
-        return NULL;
-    }
-    if (mkdir(tmpl) == -1) {
-        return NULL;
-    }
-    return tmpl;
-}
-#endif
-
-void AppAlignmentChecker::extractAndQueue(const PathInfo& archivePaths) {
-    const std::filesystem::path& realPath = archivePaths.realPath;
-    const std::string& displayPath = archivePaths.displayPath;
-
-    std::string tempDirTemplateStr =
-            (std::filesystem::temp_directory_path() / "compat_check_XXXXXX").string();
-    std::vector<char> tempDirTemplate(tempDirTemplateStr.begin(), tempDirTemplateStr.end());
-    tempDirTemplate.push_back('\0');
-
-    char* tempDirCstr = mkdtemp(tempDirTemplate.data());
-    if (tempDirCstr == nullptr) {
-        std::cout << "Failed to create temporary directory for " << displayPath << std::endl;
-        mAllPassed = false;
-        return;
-    }
-    std::filesystem::path tempPath(tempDirCstr);
-    mTempDirs.push_back(tempPath);
-
-    ZipArchiveHandle handle;
-    int32_t openResult = OpenArchive(realPath.string().c_str(), &handle);
-    if (openResult != 0) {
-        if (openResult == kEmptyArchive) {
-            std::cout << "Archive " << displayPath << " is empty. Skipping extraction."
-                      << std::endl;
-            return;
-        }
-        std::cout << "Failed to open archive " << displayPath << ": " << ErrorCodeString(openResult)
-                  << std::endl;
-        mAllPassed = false;
-        return;
-    }
-
-    void* cookie;
-    if (StartIteration(handle, &cookie) != 0) {
-        std::cout << "Failed to start iteration on archive " << displayPath << std::endl;
-        mAllPassed = false;
-        CloseArchive(handle);
-        return;
-    }
-
-    ZipEntry64 entry;
-    std::string name;
-    while (Next(cookie, &entry, &name) == 0) {
-        std::filesystem::path outPath = tempPath / name;
-        if (name.back() == '/') {
-            std::filesystem::create_directories(outPath);
-            continue;
-        }
-
-        std::filesystem::create_directories(outPath.parent_path());
-        int open_flags = O_WRONLY | O_CREAT | O_TRUNC;
-#ifdef _WIN32
-        open_flags |= O_BINARY;
-#endif
-        android::base::unique_fd fd(open(outPath.string().c_str(), open_flags, entry.unix_mode));
-
-        if (fd == -1) {
-            std::cout << "Failed to create file: " << outPath << std::endl;
-            mAllPassed = false;
-            continue;
-        }
-
-        ExtractEntryToFile(handle, &entry, fd);
-    }
-
-    EndIteration(cookie);
-    CloseArchive(handle);
-
-    mScanQueue.push_back({tempPath, displayPath});
 }
 
 std::optional<std::string> AppAlignmentChecker::getNdkVersion(const Elf64_File& elfFile) {
@@ -362,4 +292,86 @@ void AppAlignmentChecker::printHelp(const char* arg0) {
             << "Options:\n"
             << "  -h, --help    Display this help message and exit.\n"
             << std::endl;
+}
+
+#ifdef _WIN32
+static char* mkdtemp(char* tmpl) {
+    if (mktemp(tmpl) == NULL) {
+        return NULL;
+    }
+    if (mkdir(tmpl) == -1) {
+        return NULL;
+    }
+    return tmpl;
+}
+#endif
+
+static bool stageArchiveContents(const fs::path& archivePath, fs::path& stagedEntriesRootDir) {
+    std::string tempDirTemplateStr =
+            (fs::temp_directory_path() / "staged_archives_XXXXXX").string();
+    std::vector<char> tempDirTemplate(tempDirTemplateStr.begin(), tempDirTemplateStr.end());
+    tempDirTemplate.push_back('\0');
+
+    char* tempDirCstr = mkdtemp(tempDirTemplate.data());
+    if (tempDirCstr == nullptr) {
+        std::cout << "Failed to create temporary directory for " << tempDirTemplate.data()
+                  << std::endl;
+        return false;
+    }
+    fs::path tempPath(tempDirCstr);
+
+    ZipArchiveHandle handle;
+    int32_t openResult = OpenArchive(archivePath.string().c_str(), &handle);
+    if (openResult != 0) {
+        if (openResult == kEmptyArchive) {
+            std::cout << "Archive " << archivePath.string().c_str()
+                      << " is empty. Skipping extraction." << std::endl;
+            return true;
+        }
+
+        std::cout << "Failed to open archive " << archivePath.string().c_str() << ": "
+                  << ErrorCodeString(openResult) << std::endl;
+        return false;
+    }
+
+    void* cookie;
+    if (StartIteration(handle, &cookie) != 0) {
+        std::cout << "Failed to start iteration on archive " << archivePath.string().c_str()
+                  << std::endl;
+        CloseArchive(handle);
+        return false;
+    }
+
+    ZipEntry64 entry;
+    std::string name;
+    bool allPassed = true;
+    while (Next(cookie, &entry, &name) == 0) {
+        fs::path outPath = tempPath / name;
+        if (name.back() == '/') {
+            fs::create_directories(outPath);
+            continue;
+        }
+
+        fs::create_directories(outPath.parent_path());
+        int open_flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+        open_flags |= O_BINARY;
+#endif
+        android::base::unique_fd fd(open(outPath.string().c_str(), open_flags, entry.unix_mode));
+
+        if (fd == -1) {
+            std::cout << "Failed to create file: " << outPath << std::endl;
+            allPassed = false;
+            continue;
+        }
+
+        ExtractEntryToFile(handle, &entry, fd);
+    }
+
+    EndIteration(cookie);
+    CloseArchive(handle);
+
+    stagedEntriesRootDir = tempPath;
+
+    return allPassed;
 }
