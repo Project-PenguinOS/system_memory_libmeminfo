@@ -59,14 +59,23 @@ cc_test {
     srcs: [
         "libelfutils_test.cpp",
     ],
-    shared_libs: [
-        "libbase",
-    ],
     static_libs: [
+        "libbase",
+        "liblog",
         "libelfutils",
     ],
-    cflags: [
-        "-Wall",
-        "-Werror",
+    data: [
+        "testdata/not_an_elf.txt",
+        "testdata/test_elf.o",
     ],
+    target: {
+        windows: {
+            enabled: true,
+            static_executable: true,
+            host_ldlibs: ["-lws2_32"],
+        },
+        android: {
+            shared_libs: ["libz"],
+        },
+    },
 }

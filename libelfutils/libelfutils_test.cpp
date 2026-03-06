@@ -2,8 +2,6 @@
 #include <elfutils/elf-file.h>
 #include <elfutils/iter.h>
 #include <gtest/gtest.h>
-#include <filesystem>
-#include <fstream>
 #include <string>
 
 using namespace android::elfutils;
@@ -16,23 +14,11 @@ TEST(ElfIteratorTest, EmptyDir) {
     EXPECT_EQ(count, 0);
 }
 
-TEST(ElfIteratorTest, NonElfFile) {
-    TemporaryDir temp_dir;
-    std::string file_path = std::string(temp_dir.path) + "/test.txt";
-    std::ofstream ofs(file_path);
-    ofs << "This is not an ELF file.";
-    ofs.close();
-    int count = 0;
-    int parsed = ElfIterator::forEachElfFromDir(temp_dir.path, [&](const ElfFile&) { count++; });
-    EXPECT_EQ(parsed, 0);
-    EXPECT_EQ(count, 0);
-}
-
-TEST(ElfIteratorTest, RealElfFile) {
+TEST(ElfIteratorTest, RealFiles) {
     std::string exe_dir = android::base::GetExecutableDirectory();
+    std::string testdata_dir = exe_dir + "/testdata";
     int count = 0;
-    int parsed = ElfIterator::forEachElfFromDir(exe_dir, [&](const ElfFile&) { count++; });
-    EXPECT_GT(parsed, 0);
-    EXPECT_GT(count, 0);
-    EXPECT_EQ(parsed, count);
+    int parsed = ElfIterator::forEachElfFromDir(testdata_dir, [&](const ElfFile&) { count++; });
+    EXPECT_EQ(parsed, 1);
+    EXPECT_EQ(count, 1);
 }
