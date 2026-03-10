@@ -72,7 +72,6 @@ cc_test {
         windows: {
             enabled: true,
             static_executable: true,
-            host_ldlibs: ["-lws2_32"],
         },
         android: {
             shared_libs: ["libz"],
