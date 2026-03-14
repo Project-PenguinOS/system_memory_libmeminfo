@@ -22,7 +22,3 @@
 // directory.
 bool stageArchiveContents(const std::filesystem::path& archivePath,
                           std::filesystem::path& stagedEntriesRootDir);
-
-#ifdef _WIN32
-static char* mkdtemp(char* tmpl);
-#endif

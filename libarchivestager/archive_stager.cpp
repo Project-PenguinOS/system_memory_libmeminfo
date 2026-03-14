@@ -29,6 +29,18 @@ namespace fs = std::filesystem;
 
 using Path = std::filesystem::path;
 
+#ifdef _WIN32
+static char* mkdtemp(char* tmpl) {
+    if (mktemp(tmpl) == NULL) {
+        return NULL;
+    }
+    if (mkdir(tmpl) == -1) {
+        return NULL;
+    }
+    return tmpl;
+}
+#endif
+
 bool stageArchiveContents(const fs::path& archivePath, fs::path& stagedEntriesRootDir) {
     std::string tempDirTemplateStr =
             (fs::temp_directory_path() / "staged_archives_XXXXXX").string();
@@ -98,15 +110,3 @@ bool stageArchiveContents(const fs::path& archivePath, fs::path& stagedEntriesRo
 
     return allPassed;
 }
-
-#ifdef _WIN32
-static char* mkdtemp(char* tmpl) {
-    if (mktemp(tmpl) == NULL) {
-        return NULL;
-    }
-    if (mkdir(tmpl) == -1) {
-        return NULL;
-    }
-    return tmpl;
-}
-#endif
