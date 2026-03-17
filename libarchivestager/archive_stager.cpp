@@ -61,11 +61,16 @@ bool stageArchiveContents(const fs::path& archivePath, fs::path& stagedEntriesRo
         if (openResult == kEmptyArchive) {
             std::cout << "Archive " << archivePath.string().c_str()
                       << " is empty. Skipping extraction." << std::endl;
+            std::error_code ec;
+            fs::remove_all(tempPath, ec);
             return true;
         }
 
         std::cout << "Failed to open archive " << archivePath.string().c_str() << ": "
                   << ErrorCodeString(openResult) << std::endl;
+        CloseArchive(handle);
+        std::error_code ec;
+        fs::remove_all(tempPath, ec);
         return false;
     }
 
@@ -74,6 +79,8 @@ bool stageArchiveContents(const fs::path& archivePath, fs::path& stagedEntriesRo
         std::cout << "Failed to start iteration on archive " << archivePath.string().c_str()
                   << std::endl;
         CloseArchive(handle);
+        std::error_code ec;
+        fs::remove_all(tempPath, ec);
         return false;
     }
 
