@@ -26,6 +26,7 @@ cc_binary_host {
         "main.cpp",
     ],
     static_libs: [
+        "libarchivestager",
         "libelfpolicy",
         "libelfutils",
         "libzipalign",
@@ -37,16 +38,20 @@ cc_binary_host {
         windows: {
             enabled: true,
         },
+        android: {
+            shared_libs: ["libz"],
+        },
     },
 }
 
 cc_test_host {
-    name: "aac_tests",
+    name: "aac_test",
     srcs: [
         "aac.cpp",
         "aac_test.cpp",
     ],
     static_libs: [
+        "libarchivestager",
         "libelfpolicy",
         "libelfutils",
         "libzipalign",
