@@ -1439,6 +1439,34 @@ TEST(ProcMemInfo, ParseSizeToBytes_Invalid) {
     EXPECT_EQ(std::nullopt, ParseSizeToBytes("0200MB"));
 }
 
+TEST(AndroidProcessHeaps, TestExtractAndroidBitmapStats) {
+    std::string smaps =
+            "12c00000-12c64000 rw-s 00000000 00:01 123                /dev/ashmem/bitmap/allocate_0_100x100_size-40000_id-123 (deleted)\n"
+            "Size:                400 kB\n"
+            "Pss:                 400 kB\n"
+            "12c64000-12cc8000 rw-s 00000000 00:01 123                /dev/ashmem/bitmap/allocate_1_100x100_size-40000_id-123 (deleted)\n"
+            "Size:                400 kB\n"
+            "Pss:                 400 kB\n"
+            "12cc8000-12d2c000 rw-s 00000000 00:01 124                /dev/ashmem/bitmap/allocate_2_100x100_size-40000_id-456 (deleted)\n"
+            "Size:                400 kB\n"
+            "Pss:                 400 kB\n";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(android::base::WriteStringToFd(smaps, tf.fd));
+
+    AndroidHeapStats stats[_NUM_HEAP];
+    memset(&stats, 0, sizeof(stats));
+    bool foundSwapPss;
+    AndroidBitmapStats bitmap_stats;
+
+    ASSERT_TRUE(ExtractAndroidHeapStatsFromFile(tf.path, stats, &foundSwapPss, &bitmap_stats));
+    EXPECT_EQ(bitmap_stats.total_count, 3);
+    EXPECT_EQ(bitmap_stats.total_size_kb, 1200);
+    EXPECT_EQ(bitmap_stats.unique_count, 2);
+    EXPECT_EQ(bitmap_stats.unique_size_kb, 800);
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     ::android::base::InitLogging(argv, android::base::StderrLogger);
