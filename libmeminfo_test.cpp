@@ -49,6 +49,18 @@ namespace fs = std::filesystem;
 
 pid_t pid = -1;
 
+TEST(PageAcct, PageFlags) {
+    uint64_t flags;
+    bool success = PageAcct::Instance().PageFlags(0, &flags);
+    if (getuid() == 0) {
+        ASSERT_TRUE(success);
+    } else {
+        // we should correctly fail if the test was executed as
+	// a non-root uid.
+        ASSERT_FALSE(success);
+    }
+}
+
 TEST(ProcMemInfo, TestWorkingTestReset) {
     // Expect reset to succeed
     EXPECT_TRUE(ProcMemInfo::ResetWorkingSet(pid));
@@ -399,6 +411,17 @@ TEST(ProcMemInfo, StatusVmRSSBogusFileTest) {
 
     uint64_t rss;
     ASSERT_EQ(StatusVmRSSFromFile(path, &rss), false);
+}
+
+TEST(ProcMemInfo, ForEachVmaFromMapsTest) {
+    ProcMemInfo proc_mem(pid);
+    std::vector<Vma> vmas;
+    auto collect_vmas = [&](const Vma& v) {
+        vmas.push_back(v);
+        return true;
+    };
+    ASSERT_TRUE(proc_mem.ForEachVmaFromMaps(collect_vmas));
+    ASSERT_GT(vmas.size(), 0);
 }
 
 TEST(ProcMemInfo, ForEachExistingVmaTest) {
@@ -1022,6 +1045,13 @@ TEST(SysMemInfo, TestEmptyFile) {
     EXPECT_EQ(mi.mem_total_kb(), 0);
 }
 
+TEST(SysMemInfo, TestZramCompacted) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string zram_mmstat_dir = exec_dir + "/testdata1/";
+    SysMemInfo mi;
+    ASSERT_EQ(mi.mem_compacted_kb(zram_mmstat_dir.c_str()), 116086);
+}
+
 TEST(SysMemInfo, TestZramTotal) {
     std::string exec_dir = ::android::base::GetExecutableDirectory();
 
@@ -1266,6 +1296,21 @@ TEST_F(CmaSysfsStats, TestReadKernelCmaUsageKb) {
     uint64_t size;
     ASSERT_TRUE(ReadKernelCmaUsageKb(&size, cma_sysfs_stats_path));
     ASSERT_EQ(size, (4 * getpagesize()) / 1024);
+}
+
+TEST(AndroidProcHeaps, ExtractAndroidHeapStatsTest) {
+    AndroidHeapStats stats[_NUM_HEAP];
+    memset(stats, 0, sizeof(stats));
+    bool foundSwapPss;
+
+    ASSERT_TRUE(ExtractAndroidHeapStats(pid, stats, &foundSwapPss));
+
+    uint64_t total_pss = 0;
+    for (int i = 0; i < _NUM_CORE_HEAP; i++) {
+        total_pss += stats[i].pss;
+    }
+
+    ASSERT_GT(total_pss, 0);
 }
 
 TEST(AndroidProcHeaps, ExtractAndroidHeapStatsFromFileTest) {
