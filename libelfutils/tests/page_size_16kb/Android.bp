@@ -26,12 +26,11 @@ cc_test {
         "general-tests",
         "vts",
     ],
-
     srcs: [
         "elf_alignment_test.cpp",
     ],
-
     static_libs: [
+        "libarchivestager",
         "libbase",
         "libdm",
         "libext2_uuid",
@@ -39,8 +38,9 @@ cc_test {
         "libelfutils",
         "libelfpolicy",
         "liblog",
+        "libziparchive",
+        "libz",
     ],
-
     cflags: [
         "-Wall",
         "-Werror",
