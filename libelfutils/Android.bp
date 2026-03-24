@@ -15,6 +15,7 @@
 //
 
 package {
+    default_team: "trendy_team_android_kernel",
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
@@ -50,4 +51,22 @@ cc_library {
             enabled: true,
         },
     },
+}
+
+cc_test {
+    name: "libelfutils_test",
+    host_supported: true,
+    srcs: [
+        "libelfutils_test.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+    ],
+    static_libs: [
+        "libelfutils",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
 }
