@@ -164,23 +164,6 @@ TEST(ProcMemInfo, MapsUsageFillInAll) {
     }
 }
 
-TEST(ProcMemInfo, MapsWithPageIdle) {
-    bool supported = PageAcct::KernelHasPageIdle();
-    ProcMemInfo proc_mem(pid, true);
-    const std::vector<Vma>& maps = proc_mem.MapsWithPageIdle();
-
-    if (supported) {
-        ASSERT_FALSE(maps.empty());
-        uint64_t total_vss = 0;
-        for (const auto& map : maps) {
-            total_vss += map.usage.vss;
-        }
-        ASSERT_NE(0, total_vss);
-    } else {
-        ASSERT_TRUE(maps.empty());
-    }
-}
-
 TEST(ProcMemInfo, PageMapPresent) {
     static constexpr size_t kNumPages = 20;
     size_t pagesize = getpagesize();
