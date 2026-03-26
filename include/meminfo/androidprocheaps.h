@@ -31,6 +31,13 @@ struct AndroidHeapStats {
     int swappedOutPss;
 };
 
+struct AndroidBitmapStats {
+    uint64_t total_count;
+    uint64_t total_size_kb;
+    uint64_t unique_count;
+    uint64_t unique_size_kb;
+};
+
 // LINT.IfChange
 enum {
     HEAP_UNKNOWN,
@@ -86,9 +93,11 @@ enum {
 };
 // LINT.ThenChange(/frameworks/base/core/java/android/os/Debug.java)
 
-bool ExtractAndroidHeapStats(int pid, AndroidHeapStats* stats, bool* foundSwapPss);
+bool ExtractAndroidHeapStats(int pid, AndroidHeapStats* stats, bool* foundSwapPss,
+                            AndroidBitmapStats* bitmap_stats = nullptr);
 
 bool ExtractAndroidHeapStatsFromFile(const std::string& path, AndroidHeapStats* stats,
-                                     bool* foundSwapPss);
+                                     bool* foundSwapPss,
+                                     AndroidBitmapStats* bitmap_stats = nullptr);
 }  // namespace meminfo
 }  // namespace android
