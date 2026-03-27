@@ -49,6 +49,18 @@ namespace fs = std::filesystem;
 
 pid_t pid = -1;
 
+TEST(PageAcct, PageFlags) {
+    uint64_t flags;
+    bool success = PageAcct::Instance().PageFlags(0, &flags);
+    if (getuid() == 0) {
+        ASSERT_TRUE(success);
+    } else {
+        // we should correctly fail if the test was executed as
+	// a non-root uid.
+        ASSERT_FALSE(success);
+    }
+}
+
 TEST(ProcMemInfo, TestWorkingTestReset) {
     // Expect reset to succeed
     EXPECT_TRUE(ProcMemInfo::ResetWorkingSet(pid));
@@ -399,6 +411,17 @@ TEST(ProcMemInfo, StatusVmRSSBogusFileTest) {
 
     uint64_t rss;
     ASSERT_EQ(StatusVmRSSFromFile(path, &rss), false);
+}
+
+TEST(ProcMemInfo, ForEachVmaFromMapsTest) {
+    ProcMemInfo proc_mem(pid);
+    std::vector<Vma> vmas;
+    auto collect_vmas = [&](const Vma& v) {
+        vmas.push_back(v);
+        return true;
+    };
+    ASSERT_TRUE(proc_mem.ForEachVmaFromMaps(collect_vmas));
+    ASSERT_GT(vmas.size(), 0);
 }
 
 TEST(ProcMemInfo, ForEachExistingVmaTest) {
@@ -1022,6 +1045,13 @@ TEST(SysMemInfo, TestEmptyFile) {
     EXPECT_EQ(mi.mem_total_kb(), 0);
 }
 
+TEST(SysMemInfo, TestZramCompacted) {
+    std::string exec_dir = ::android::base::GetExecutableDirectory();
+    std::string zram_mmstat_dir = exec_dir + "/testdata1/";
+    SysMemInfo mi;
+    ASSERT_EQ(mi.mem_compacted_kb(zram_mmstat_dir.c_str()), 116086);
+}
+
 TEST(SysMemInfo, TestZramTotal) {
     std::string exec_dir = ::android::base::GetExecutableDirectory();
 
@@ -1268,6 +1298,21 @@ TEST_F(CmaSysfsStats, TestReadKernelCmaUsageKb) {
     ASSERT_EQ(size, (4 * getpagesize()) / 1024);
 }
 
+TEST(AndroidProcHeaps, ExtractAndroidHeapStatsTest) {
+    AndroidHeapStats stats[_NUM_HEAP];
+    memset(stats, 0, sizeof(stats));
+    bool foundSwapPss;
+
+    ASSERT_TRUE(ExtractAndroidHeapStats(pid, stats, &foundSwapPss));
+
+    uint64_t total_pss = 0;
+    for (int i = 0; i < _NUM_CORE_HEAP; i++) {
+        total_pss += stats[i].pss;
+    }
+
+    ASSERT_GT(total_pss, 0);
+}
+
 TEST(AndroidProcHeaps, ExtractAndroidHeapStatsFromFileTest) {
     std::string smaps =
             R"smaps(12c00000-13440000 rw-p 00000000 00:00 0  [anon:dalvik-main space (region space)]
@@ -1437,6 +1482,34 @@ TEST(ProcMemInfo, ParseSizeToBytes_Invalid) {
     EXPECT_EQ(std::nullopt, ParseSizeToBytes("+200MB"));
     EXPECT_EQ(std::nullopt, ParseSizeToBytes("200"));
     EXPECT_EQ(std::nullopt, ParseSizeToBytes("0200MB"));
+}
+
+TEST(AndroidProcessHeaps, TestExtractAndroidBitmapStats) {
+    std::string smaps =
+            "12c00000-12c64000 rw-s 00000000 00:01 123                /dev/ashmem/bitmap/allocate_0_100x100_size-40000_id-123 (deleted)\n"
+            "Size:                400 kB\n"
+            "Pss:                 400 kB\n"
+            "12c64000-12cc8000 rw-s 00000000 00:01 123                /dev/ashmem/bitmap/allocate_1_100x100_size-40000_id-123 (deleted)\n"
+            "Size:                400 kB\n"
+            "Pss:                 400 kB\n"
+            "12cc8000-12d2c000 rw-s 00000000 00:01 124                /dev/ashmem/bitmap/allocate_2_100x100_size-40000_id-456 (deleted)\n"
+            "Size:                400 kB\n"
+            "Pss:                 400 kB\n";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(android::base::WriteStringToFd(smaps, tf.fd));
+
+    AndroidHeapStats stats[_NUM_HEAP];
+    memset(&stats, 0, sizeof(stats));
+    bool foundSwapPss;
+    AndroidBitmapStats bitmap_stats;
+
+    ASSERT_TRUE(ExtractAndroidHeapStatsFromFile(tf.path, stats, &foundSwapPss, &bitmap_stats));
+    EXPECT_EQ(bitmap_stats.total_count, 3);
+    EXPECT_EQ(bitmap_stats.total_size_kb, 1200);
+    EXPECT_EQ(bitmap_stats.unique_count, 2);
+    EXPECT_EQ(bitmap_stats.unique_size_kb, 800);
 }
 
 int main(int argc, char** argv) {
