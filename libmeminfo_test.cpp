@@ -1425,6 +1425,66 @@ TEST(SysMemInfo, TestReadDmaBufHeapPoolsSizeKb) {
     EXPECT_EQ(size, 416);
 }
 
+TEST(SysMemInfo, TestReadSlabInfo) {
+    std::string slabinfo = R"slabinfo(slabinfo - version: 2.1
+# name            <active_objs> <num_objs> <objsize> <objperslab> <pagesperslab> : tunables <limit> <batchcount> <sharedfactor> : slabdata <active_slabs> <num_slabs> <sharedavail>
+kmalloc-64        439896 443904     64   64    1 : tunables    0    0    0 : slabdata   6936   6936      0
+kmalloc-192        43803  45045    192   21    1 : tunables    0    0    0 : slabdata   2145   2145      0
+kmalloc-128        60421  63328    128   32    1 : tunables    0    0    0 : slabdata   1979   1979      0
+)slabinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(slabinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    int page_size = getpagesize();
+    std::unordered_map<std::string, SlabCacheStats> slab_cache_stats;
+    ASSERT_TRUE(ReadSlabInfo(&slab_cache_stats, file));
+    ASSERT_EQ(slab_cache_stats.size(), 3);
+    ASSERT_EQ(slab_cache_stats["kmalloc-64"].totalMemUsageKb, (page_size * 1 * 6936) / 1024);
+    ASSERT_EQ(slab_cache_stats["kmalloc-128"].totalMemUsageKb, (page_size * 1 * 1979) / 1024);
+    ASSERT_EQ(slab_cache_stats["kmalloc-192"].totalMemUsageKb, (page_size * 1 * 2145) / 1024);
+}
+
+TEST(SysMemInfo, TestReadSlabInfoBadVersion) {
+    std::string slabinfo = R"slabinfo(slabinfo - version: 2.2
+# name            <active_objs> <num_objs> <objsize> <objperslab> <pagesperslab> : tunables <limit> <batchcount> <sharedfactor> : slabdata <active_slabs> <num_slabs> <sharedavail>
+kmalloc-64        439896 443904     64   64    1 : tunables    0    0    0 : slabdata   6936   6936      0
+kmalloc-192        43803  45045    192   21    1 : tunables    0    0    0 : slabdata   2145   2145      0
+kmalloc-128        60421  63328    128   32    1 : tunables    0    0    0 : slabdata   1979   1979      0
+)slabinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(slabinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    std::unordered_map<std::string, SlabCacheStats> slab_cache_stats;
+    ASSERT_FALSE(ReadSlabInfo(&slab_cache_stats, file));
+}
+
+TEST(SysMemInfo, TestReadSlabInfoDuplicateSlabs) {
+    std::string slabinfo = R"slabinfo(slabinfo - version: 2.1
+# name            <active_objs> <num_objs> <objsize> <objperslab> <pagesperslab> : tunables <limit> <batchcount> <sharedfactor> : slabdata <active_slabs> <num_slabs> <sharedavail>
+kmalloc-64        439896 443904     64   64    1 : tunables    0    0    0 : slabdata   6936   6936      0
+kmalloc-64         43803  45045    192   21    1 : tunables    0    0    0 : slabdata   2145   2145      0
+kmalloc-128        60421  63328    128   32    1 : tunables    0    0    0 : slabdata   1979   1979      0
+)slabinfo";
+
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    ASSERT_TRUE(::android::base::WriteStringToFd(slabinfo, tf.fd));
+    std::string file = std::string(tf.path);
+
+    int page_size = getpagesize();
+    std::unordered_map<std::string, SlabCacheStats> slab_cache_stats;
+    ASSERT_TRUE(ReadSlabInfo(&slab_cache_stats, file));
+    ASSERT_EQ(slab_cache_stats.size(), 2);
+    ASSERT_EQ(slab_cache_stats["kmalloc-64"].totalMemUsageKb, (page_size * 1 * (6936 + 2145)) / 1024);
+    ASSERT_EQ(slab_cache_stats["kmalloc-128"].totalMemUsageKb, (page_size * 1 * 1979) / 1024);
+}
+
 TEST(ProcMemInfo, ParseSizeToBytes_Valid) {
     EXPECT_EQ(std::optional<uint64_t>(0), ParseSizeToBytes("0MB"));
     EXPECT_EQ(std::optional<uint64_t>(1024), ParseSizeToBytes("1024B"));
