@@ -29,6 +29,10 @@
 namespace android {
 namespace meminfo {
 
+struct SlabCacheStats {
+  int32_t totalMemUsageKb;
+};
+
 class SysMemInfo final {
     // System or Global memory accounting
   public:
@@ -166,6 +170,10 @@ bool ReadDmabufHeapTotalExportedKb(uint64_t* size);
 // Read total amount of memory in kb allocated by kernel drivers through CMA.
 bool ReadKernelCmaUsageKb(uint64_t* size,
                           const std::string& cma_stats_sysfs_path = "/sys/kernel/mm/cma");
+
+// Read per-slab cache memory usage. Returns a map of slab cache -> slab cache memory usage stats.
+bool ReadSlabInfo(std::unordered_map<std::string, SlabCacheStats>* out,
+                  const std::string& slabInfoPath = "/proc/slabinfo");
 
 }  // namespace meminfo
 }  // namespace android
