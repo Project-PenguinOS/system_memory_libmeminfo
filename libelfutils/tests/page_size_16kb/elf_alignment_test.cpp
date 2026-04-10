@@ -27,6 +27,8 @@
 #include <android/api-level.h>
 #include <elfpolicy/elf_policy.h>
 #include <elfutils/iter.h>
+#include <fs_avb/fs_avb_util.h>
+#include <libavb/libavb.h>
 #include <libdm/dm.h>
 
 using ::android::elfutils::Elf64_File;
@@ -78,6 +80,48 @@ static std::set<std::string> getMounts() {
 
 using ::android::elfutils::ElfFile;
 
+static std::vector<std::string> getSystemPartitions() {
+    std::vector<std::string> system_partitions;
+
+    std::string vbmeta_path = "/dev/block/by-name/vbmeta_system";
+    std::string slot_suffix = android::base::GetProperty("ro.boot.slot_suffix", "");
+    vbmeta_path += slot_suffix;
+
+    auto vbmeta = android::fs_mgr::LoadAndVerifyVbmetaByPath(
+            vbmeta_path, "vbmeta_system", "" /* expected_public_key_blob */,
+            true /* allow_verification_error */, false /* rollback_protection */,
+            false /* is_chained_vbmeta */, nullptr /* out_public_key_data */,
+            nullptr /* out_verification_disabled */, nullptr /* out_verify_result */);
+
+    if (vbmeta) {
+        auto partition_names = android::fs_mgr::GetAllPartitionNames(*vbmeta);
+        for (const auto& name : partition_names) {
+            system_partitions.push_back("/" + name);
+        }
+    } else {
+        // Fallback to a default set if vbmeta_system cannot be loaded
+        system_partitions = {"/system", "/system_ext", "/product"};
+    }
+
+    return system_partitions;
+}
+
+static bool isSystemPartition(const std::string& path) {
+    static std::vector<std::string> system_partitions = getSystemPartitions();
+
+    for (const auto& prefix : system_partitions) {
+        if (android::base::StartsWith(path, prefix + "/")) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool isVendorPartition(const std::string path) {
+    return !isSystemPartition(path);
+}
+
 class ElfAlignmentTest : public ::testing::TestWithParam<std::string> {
   protected:
     static void loadAlignmentCb(ElfFile& elfFile) {
@@ -123,7 +167,7 @@ class ElfAlignmentTest : public ::testing::TestWithParam<std::string> {
                 elfFile, kRequiredMaxSupportedPageSize, errorMsg))
                 << "File " << path << " failed 16k compatibility check: " << errorMsg;
 
-        // Older toolchains  have a bug in both GNU ld and LLVM lld which causes
+        // Older toolchains have a bug in both GNU ld and LLVM lld which causes
         // the RELRO's end alignment to not respect the specified max-page-size.
         // See: https://developer.android.com/guide/practices/page-sizes#compile-r22-lower
         //
@@ -131,7 +175,7 @@ class ElfAlignmentTest : public ::testing::TestWithParam<std::string> {
         // updating vendor partitions due to GRF; only enfore this on /vendor/
         // starting from chipset version 202604 -- where it is implicitly required
         // in order to implement [GMS-VSR-3.14.1-004] and [GMS-VSR-3.14.1-005]
-        if (vendorApiLevel() < 202604 && android::base::StartsWith(path, "/vendor/")) {
+        if (vendorApiLevel() < 202604 && isVendorPartition(path)) {
             return;
         }
 
