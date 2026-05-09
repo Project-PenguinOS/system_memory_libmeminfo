@@ -18,7 +18,6 @@
 #include <gtest/gtest.h>
 #include <mntent.h>
 
-#include <iomanip>
 #include <regex>
 #include <set>
 
@@ -27,8 +26,6 @@
 #include <android/api-level.h>
 #include <elfpolicy/elf_policy.h>
 #include <elfutils/iter.h>
-#include <fs_avb/fs_avb_util.h>
-#include <libavb/libavb.h>
 #include <libdm/dm.h>
 
 using ::android::elfutils::Elf64_File;
@@ -80,34 +77,8 @@ static std::set<std::string> getMounts() {
 
 using ::android::elfutils::ElfFile;
 
-static std::vector<std::string> getSystemPartitions() {
-    std::vector<std::string> system_partitions;
-
-    std::string vbmeta_path = "/dev/block/by-name/vbmeta_system";
-    std::string slot_suffix = android::base::GetProperty("ro.boot.slot_suffix", "");
-    vbmeta_path += slot_suffix;
-
-    auto vbmeta = android::fs_mgr::LoadAndVerifyVbmetaByPath(
-            vbmeta_path, "vbmeta_system", "" /* expected_public_key_blob */,
-            true /* allow_verification_error */, false /* rollback_protection */,
-            false /* is_chained_vbmeta */, nullptr /* out_public_key_data */,
-            nullptr /* out_verification_disabled */, nullptr /* out_verify_result */);
-
-    if (vbmeta) {
-        auto partition_names = android::fs_mgr::GetAllPartitionNames(*vbmeta);
-        for (const auto& name : partition_names) {
-            system_partitions.push_back("/" + name);
-        }
-    } else {
-        // Fallback to a default set if vbmeta_system cannot be loaded
-        system_partitions = {"/system", "/system_ext", "/product"};
-    }
-
-    return system_partitions;
-}
-
 static bool isSystemPartition(const std::string& path) {
-    static std::vector<std::string> system_partitions = getSystemPartitions();
+    static std::vector<std::string> system_partitions = {"/system", "/system_ext", "/product"};
 
     for (const auto& prefix : system_partitions) {
         if (android::base::StartsWith(path, prefix + "/")) {
