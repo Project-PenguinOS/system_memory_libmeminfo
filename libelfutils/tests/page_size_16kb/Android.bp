@@ -34,18 +34,12 @@ cc_test {
         "libbase",
         "libdm",
         "libext2_uuid",
-        "libavb",
-        "libfs_avb",
         "libfs_mgr",
         "libelfutils",
         "libelfpolicy",
         "liblog",
         "libziparchive",
         "libz",
-    ],
-
-    shared_libs: [
-        "libcrypto",
     ],
 
     cflags: [
